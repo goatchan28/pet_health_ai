@@ -8,6 +8,7 @@ class MyAppState extends ChangeNotifier {
   int petIndex = 0;
   Map<String, double> scannedFoodData = {};
   bool barcodeNotFound = false;
+  bool isLoggedIn = false;
 
   final Map<String, String> apiToAppNutrientMap = {
     "proteins_100g": "Crude Protein",
@@ -203,6 +204,17 @@ class MyAppState extends ChangeNotifier {
     pet.addFood(updatedValues);
     scannedFoodData = {}; // Update the pet's intake
     notifyListeners(); // Notify UI about changes
+  }
+  
+  void logIn(){
+    isLoggedIn = true;
+    notifyListeners();
+  }
+
+  void logOut(){
+    isLoggedIn = false;
+    changeIndex(2);
+    notifyListeners();
   }
 
   Future<void> fetchBarcodeData(String barcode) async {

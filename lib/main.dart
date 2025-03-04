@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pet_health_ai/pages/signup_page.dart';
 import 'package:provider/provider.dart';
 import 'package:pet_health_ai/models/pet.dart';
 import 'package:pet_health_ai/models/app_state.dart';
@@ -27,7 +28,12 @@ class MyApp extends StatelessWidget {
             colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromRGBO(152, 171, 218, 1)),
             scaffoldBackgroundColor: Color.fromRGBO(215,215,215,1),
           ),
-          home: MyHomePage(),
+        home: Consumer<MyAppState>(
+          builder: (context, appState, _) {
+            print("isLoggedIn: ${appState.isLoggedIn}");  // Debug print
+            return appState.isLoggedIn ? MyHomePage() : SignupPage();
+          },
+        ),
       ),
     );
   }

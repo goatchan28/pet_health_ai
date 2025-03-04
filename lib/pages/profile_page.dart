@@ -110,6 +110,10 @@ class ProfilePage extends StatelessWidget {
                 trailing: Icon(Icons.chevron_right),
                 onTap: () {},
               ),
+              ElevatedButton(
+               onPressed: (){appState.logOut();},
+               child: const Text('Log Out', style: TextStyle(fontSize: 16),)
+             )
             ],
         ),
       ),
