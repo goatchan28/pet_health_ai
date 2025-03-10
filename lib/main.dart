@@ -1,4 +1,9 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:pet_health_ai/firebase_options.dart';
+import 'package:pet_health_ai/pages/login_page.dart';
+import 'package:pet_health_ai/pages/name_page.dart';
 import 'package:pet_health_ai/pages/signup_page.dart';
 import 'package:provider/provider.dart';
 import 'package:pet_health_ai/models/pet.dart';
@@ -10,6 +15,10 @@ import 'package:pet_health_ai/pages/food_page.dart';
 import 'package:pet_health_ai/pages/profile_page.dart';
 
 void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 
@@ -28,12 +37,34 @@ class MyApp extends StatelessWidget {
             colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromRGBO(152, 171, 218, 1)),
             scaffoldBackgroundColor: Color.fromRGBO(215,215,215,1),
           ),
-        home: Consumer<MyAppState>(
-          builder: (context, appState, _) {
-            print("isLoggedIn: ${appState.isLoggedIn}");  // Debug print
-            return appState.isLoggedIn ? MyHomePage() : SignupPage();
-          },
-        ),
+        home: StreamBuilder(
+          stream: FirebaseAuth.instance.authStateChanges(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting){
+              return const Center(
+                child: CircularProgressIndicator(),
+              );
+            }
+            if (snapshot.hasData && snapshot.data != null) {
+              var appState = context.watch<MyAppState>();
+              if (appState.needsToEnterName) {
+                return const EnterNamePage();
+              } else {
+                if (appState.name == "Guest") {
+                  final user = FirebaseAuth.instance.currentUser;
+                  if (user != null) {
+                    print(FirebaseAuth.instance.currentUser?.uid);
+                    appState.getPets();
+                    fetchAndSetName(context);
+                  }
+                }
+                return const MyHomePage();
+              }
+            } else {
+              return EnterAccountPage();
+            }
+          }
+        )
       ),
     );
   }
@@ -98,6 +129,35 @@ class _MyHomePageState extends State<MyHomePage> {
         onDestinationSelected: (value){
             appState.changeIndex(value);
         },
+      ),
+    );
+  }
+}
+
+class EnterAccountPage extends StatefulWidget{
+  const EnterAccountPage({super.key});
+
+  @override
+  State<EnterAccountPage> createState() => _EnterAccountPageState();
+}
+
+class _EnterAccountPageState extends State<EnterAccountPage>{
+  @override
+  Widget build(BuildContext context) {
+    var appState = context.watch<MyAppState>();
+    Widget page;
+    switch(appState.enterAccountIndex){
+      case 0:
+        page = SignUpPage();
+      case 1:
+        page = LoginPage();
+      default:
+        throw UnimplementedError('No widget for selectedIndex: ${appState.enterAccountIndex}');
+    } 
+    return Scaffold(
+      body: Container(
+        color: Theme.of(context).colorScheme.primary,
+        child: page,
       ),
     );
   }

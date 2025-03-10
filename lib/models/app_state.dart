@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'pet.dart';
@@ -5,10 +7,13 @@ import 'dart:convert';
 
 class MyAppState extends ChangeNotifier {
   int currentPageIndex = 2;
+  int enterAccountIndex = 0;
   int petIndex = 0;
   Map<String, double> scannedFoodData = {};
   bool barcodeNotFound = false;
-  bool isLoggedIn = false;
+  String name = "Guest";
+  bool needsToEnterName = false;
+  final Pet defaultPet = Pet(name: "Buddy", breed: "Golden Retriever", weight: 29, age: 6, neutered_spayed: false);
 
   final Map<String, String> apiToAppNutrientMap = {
     "proteins_100g": "Crude Protein",
@@ -63,109 +68,21 @@ class MyAppState extends ChangeNotifier {
       },
     ];
 
-  final List<Pet> pets = [
-    Pet(
-      name: "Buddy",
-      breed: "Golden Retriever",
-      weight: 29, // Rounded from 29.48 kg
-      age: 6, 
-      neutered_spayed: false,
-      nutritionalRequirements: {
-        "Crude Protein": 64,
-        "Arginine": 1.81,
-        "Histidine": 0.68,
-        "Isoleucine": 1.35,
-        "Leucine": 2.41,
-        "Lysine": 2.24,
-        "Methionine": 1.18,
-        "Methionine-cystine": 2.31,
-        "Phenylalanine": 1.60,
-        "Phenylalanine-tyrosine": 2.62,
-        "Threonine": 1.70,
-        "Tryptophan": 0.57,
-        "Valine": 1.74,
-        "Crude Fat": 20,
-        "Linoleic acid": 4.00,
-        "Calcium": 1.77,
-        "Phosphorus": 1.42,
-        "Potassium": 2.13,
-        "Sodium": 0.28,
-        "Chloride": 0.43,
-        "Magnesium": 0.21,
-        "Iron": 14.17,
-        "Copper": 2.59,
-        "Manganese": 1.77,
-        "Zinc": 28.34,
-        "Iodine": 0.35,
-        "Selenium": 0.11,
-        "Vitamin A": 1771.38,
-        "Vitamin D": 177.14,
-        "Vitamin E": 17.71,
-        "Thiamine": 0.79,
-        "Riboflavin": 1.84,
-        "Pantothenic acid": 4.25,
-        "Niacin": 4.82,
-        "Pyridoxine": 0.54,
-        "Folic acid": 0.08,
-        "Vitamin B12": 0.01,
-        "Choline": 481.81,
-      },
-      nutritionalIntake: {}, // Will be initialized dynamically in the class
-    ),
-    Pet(
-      name: "Sigma",
-      breed: "Alaskan Malamute",
-      weight: 36, // Rounded from 36.29 kg
-      age: 36,
-      neutered_spayed: true,
-      nutritionalRequirements: {
-        "Crude Protein": 75,
-        "Arginine": 2.12,
-        "Histidine": 0.79,
-        "Isoleucine": 1.57,
-        "Leucine": 2.82,
-        "Lysine": 2.62,
-        "Methionine": 1.37,
-        "Methionine-cystine": 2.70,
-        "Phenylalanine": 1.87,
-        "Phenylalanine-tyrosine": 3.06,
-        "Threonine": 1.99,
-        "Tryptophan": 0.66,
-        "Valine": 2.04,
-        "Crude Fat": 23,
-        "Linoleic acid": 4.64,
-        "Calcium": 2.07,
-        "Phosphorus": 1.66,
-        "Potassium": 2.48,
-        "Sodium": 0.33,
-        "Chloride": 0.50,
-        "Magnesium": 0.25,
-        "Iron": 16.56,
-        "Copper": 3.03,
-        "Manganese": 2.07,
-        "Zinc": 33.12,
-        "Iodine": 0.41,
-        "Selenium": 0.13,
-        "Vitamin A": 2069.88,
-        "Vitamin D": 206.99,
-        "Vitamin E": 20.70,
-        "Thiamine": 0.93,
-        "Riboflavin": 2.15,
-        "Pantothenic acid": 4.97,
-        "Niacin": 5.63,
-        "Pyridoxine": 0.63,
-        "Folic acid": 0.09,
-        "Vitamin B12": 0.01,
-        "Choline": 563.01,
-      },
-      nutritionalIntake: {}, // Will be initialized dynamically in the class
-    ),
-  ];
+  List<Pet> pets = [];
+  
+  MyAppState(){
+    pets = [defaultPet];
+  }
 
   Pet get selectedPet => pets[petIndex];
 
   void changeIndex(int idx){
     currentPageIndex = idx;
+    notifyListeners();
+  }
+
+  void changeEnterAccountIndex(int idx){
+    enterAccountIndex = idx;
     notifyListeners();
   }
 
@@ -181,8 +98,34 @@ class MyAppState extends ChangeNotifier {
     }
   }
 
-  void addPet(Pet pet) {
-    pets.add(pet);
+  Future<void> addPet({
+    required String name,
+    required String breed,
+    required double weight,
+    required double age,
+    required bool neuteredSpayed,
+  }) async {
+    try {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      // 🔥 Directly push user-entered info to Firestore
+      final docRef = await FirebaseFirestore.instance.collection('pets').add({
+        'name': name,
+        'breed': breed,
+        'weight': weight,
+        'age': age,
+        'neuteredSpayed': neuteredSpayed,
+        'ownerUID': uid  // 🔥 Save owner's UID for filtering later
+      });
+
+      print("Pet added to Firestore with ID: ${docRef.id}");
+    } else {
+      print("User is not logged in!");
+    }
+  } catch (e) {
+    print("Error adding pet to Firestore: $e");
+  }
+    await getPets();
     notifyListeners();
   }
 
@@ -205,15 +148,50 @@ class MyAppState extends ChangeNotifier {
     scannedFoodData = {}; // Update the pet's intake
     notifyListeners(); // Notify UI about changes
   }
-  
-  void logIn(){
-    isLoggedIn = true;
+
+  void setNeedsToEnterName(bool value) {
+    needsToEnterName = value;
     notifyListeners();
   }
 
-  void logOut(){
-    isLoggedIn = false;
-    changeIndex(2);
+  Future<void> getPets() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        final snapshot = await FirebaseFirestore.instance
+            .collection('pets')
+            .where("ownerUID", isEqualTo: uid)  // Filter by user ID if needed
+            .get();
+
+        if (snapshot.docs.isNotEmpty){
+          pets = snapshot.docs.map((doc) {
+            final data = doc.data();
+
+            // Create a Pet object for each document
+            return Pet(
+              name: data['name'],
+              breed: data['breed'],
+              weight: data['weight'],
+              age: data['age'],
+              neutered_spayed: data['neuteredSpayed'],
+            );
+          }).toList();
+        }
+        notifyListeners();   // Notify listeners to update UI
+        print("Pets fetched successfully: ${pets.length} pets.");
+      }
+    } catch (e) {
+      print("Error fetching pets: $e");
+    }
+  }
+  
+  void signOut() async {
+    await FirebaseAuth.instance.signOut();
+    changeEnterAccountIndex(0);
+    name = "Guest";
+    selectPet(0);
+    pets = [defaultPet];
+    setNeedsToEnterName(false);
     notifyListeners();
   }
 

@@ -25,7 +25,7 @@ class ProfilePage extends StatelessWidget {
                     ),
                     SizedBox(height: 8),
                     Text(
-                      'Iain Fulnecky',
+                      appState.name,
                       style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                     Text(
@@ -61,7 +61,7 @@ class ProfilePage extends StatelessWidget {
               ),
               SizedBox(height: 10),
               ElevatedButton(
-                onPressed: () => _showAddPetDialog(context),
+                onPressed: () => showAddPetDialog(context),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -111,9 +111,9 @@ class ProfilePage extends StatelessWidget {
                 onTap: () {},
               ),
               ElevatedButton(
-               onPressed: (){appState.logOut();},
-               child: const Text('Log Out', style: TextStyle(fontSize: 16),)
-             )
+                onPressed: () {appState.signOut();}, 
+                child: Text('Log Out', style: TextStyle(fontSize: 16))
+              )
             ],
         ),
       ),
@@ -121,7 +121,7 @@ class ProfilePage extends StatelessWidget {
   }
 }
 
-void _showAddPetDialog(BuildContext context){
+Future<void> showAddPetDialog(BuildContext context) async {
   var appState = context.read<MyAppState>();
 
   Map<String, TextEditingController> controllers = {
@@ -178,20 +178,17 @@ void _showAddPetDialog(BuildContext context){
       return;
     }
 
-    // ✅ Now we are sure `weight`, `age`, and `neutered_spayed` are NOT null.
-    Pet newPet = Pet(
+    appState.addPet(
       name: name,
       breed: breed,
-      weight: weight!,  // ✅ Guaranteed to be a `double`
-      age: age!,        // ✅ Guaranteed to be a `double`
-      neutered_spayed: neuteredSpayed!, // ✅ Guaranteed to be a `bool`
+      weight: weight!,
+      age: age!,
+      neuteredSpayed: neuteredSpayed!,
     );
-
-    appState.addPet(newPet);
     Navigator.pop(context);
   }
 
-  showDialog(
+  await showDialog(
     context: context, 
     builder: (context) {
       return AlertDialog(
@@ -232,7 +229,9 @@ void _showAddPetDialog(BuildContext context){
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              Navigator.pop(context); 
+            },
             child: Text("Cancel"),
           ),
           ElevatedButton(

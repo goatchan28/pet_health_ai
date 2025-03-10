@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "780661175944",
+    "project_id": "petrition-backend",
+    "storage_bucket": "petrition-backend.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:780661175944:android:98eb3b1065b4537bf3d13d",
+        "android_client_info": {
+          "package_name": "com.example.pet_health_ai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA39rk2Pxah6Sa3HJ9momcKOaUb3lrOKZo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
