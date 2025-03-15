@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:pet_health_ai/models/app_state.dart';
 import 'package:pet_health_ai/pages/profile_page.dart';
@@ -23,25 +22,13 @@ class _EnterNamePageState extends State<EnterNamePage> {
   Future<void> _submitName() async {
     var appState = context.read<MyAppState>();
     if (nameController.text.isNotEmpty) {
-      await setName();
-      await fetchAndSetName(context);
+      await appState.setName(nameController.text);
       await showAddPetDialog(context);
       appState.setNeedsToEnterName(false);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Please fill out both fields")),
       );
-    }
-  }
-
-  Future<void> setName() async {
-    try{
-      final user = FirebaseAuth.instance.currentUser;
-        if (user != null) {
-          await user.updateProfile(displayName: nameController.text);
-        }
-    } catch (e){
-      print(e);
     }
   }
 
@@ -67,19 +54,5 @@ class _EnterNamePageState extends State<EnterNamePage> {
         ),
       ),
     );
-  }
-}
-
-Future<void> fetchAndSetName(BuildContext context) async {
-  try {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid != null) {
-      var appState = context.read<MyAppState>();
-      appState.name = FirebaseAuth.instance.currentUser!.displayName!;
-      print("Fetched name: ${appState.name}");
-      }
-    }
- catch (e) {
-    print("Error fetching name: $e");
   }
 }

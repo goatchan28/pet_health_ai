@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'pet.dart';
 import 'dart:convert';
+import "package:shared_preferences/shared_preferences.dart";
 
 class MyAppState extends ChangeNotifier {
   int currentPageIndex = 2;
@@ -14,6 +17,13 @@ class MyAppState extends ChangeNotifier {
   String name = "Guest";
   bool needsToEnterName = false;
   final Pet defaultPet = Pet(name: "Buddy", breed: "Golden Retriever", weight: 29, age: 6, neutered_spayed: false);
+  late SharedPreferencesWithCache prefs;
+  bool hasLoadedData = false;
+  List<Pet> pets = [];
+  
+  MyAppState() {
+    pets = [defaultPet];
+  }
 
   final Map<String, String> apiToAppNutrientMap = {
     "proteins_100g": "Crude Protein",
@@ -68,13 +78,127 @@ class MyAppState extends ChangeNotifier {
       },
     ];
 
-  List<Pet> pets = [];
+  Future<void> scheduleDailyReset() async{
+    final now = DateTime.now();
+    final todayUtc = "${now.year}-${now.month}-${now.day}";
+
+    try {
+      // 🔥 Get last reset date from Firestore (System-wide)
+      final resetDoc = await FirebaseFirestore.instance
+          .collection("system")
+          .doc("dailyReset")
+          .get();
+
+      final lastResetDate = resetDoc.exists ? resetDoc["lastResetDate"] : null;
+
+      if (lastResetDate == todayUtc) {
+        print("✅ Already reset today. Skipping reset.");
+        return; // Prevent multiple resets in one day
+      }
+
+      print("🌙 Running daily reset...");
+      await resetAllPets(); // Reset for all users
+
+      // 🔥 Save today's date (UTC) in Firestore
+      await FirebaseFirestore.instance
+          .collection("system")
+          .doc("dailyReset")
+          .set({"lastResetDate": todayUtc});
+
+      print("✅ Daily reset completed.");
+    } catch (e) {
+      print("❌ Error in daily reset: $e");
+    }
+  }
   
-  MyAppState(){
-    pets = [defaultPet];
+  Future<void> resetAllPets() async {
+    try {
+      print("🌙 Resetting all pets' intake...");
+    
+      // 🔥 Fetch ALL pets from Firestore
+      final petCollection = FirebaseFirestore.instance.collection("pets");
+      final querySnapshot = await petCollection.get();
+
+      // Loop through all pets and reset their intake
+      for (var doc in querySnapshot.docs) {
+        await doc.reference.update({
+          "calorieIntake": 0,
+          "nutritionalIntake": Pet.initializeIntake(), // Reset all nutrients to zero
+        });
+      }
+
+      if (pets.isNotEmpty) {
+        for (Pet pet in pets) {
+          pet.calorieIntake = 0;
+          pet.nutritionalIntake = Pet.initializeIntake();
+        }
+        await updateLocalPetData();
+      }
+
+      print("✅ All pets' intake reset successfully!");
+    } catch (e) {
+      print("❌ Error resetting pets: $e");
+    }
+  }
+
+  Future<void> init() async {
+    prefs = await SharedPreferencesWithCache.create(
+      cacheOptions: const SharedPreferencesWithCacheOptions(
+        allowList: <String>{"name", "pets", "lastResetDate"}
+      )
+    );
+    await loadData();
+    await scheduleDailyReset();
+  }
+
+  Future<void> loadData() async {
+    if (hasLoadedData) return;
+    hasLoadedData = true;
+    String? savedName = prefs.getString("name") ?? "Guest";
+
+    if (savedName != name) { // Only update if different
+      name = savedName;
+      notifyListeners();
+    }
+
+    final String? petsData = prefs.getString("pets");
+    if (petsData != null && petsData.isNotEmpty) {
+      try {
+        List<dynamic> decodedPets = jsonDecode(petsData);
+        List<Pet> loadedPets = decodedPets.map((pet) => Pet.fromJson(pet)).toList();
+        if (loadedPets != pets) { // Only update if pets actually changed
+          pets = loadedPets;
+          notifyListeners(); // 🔄 Only update UI if necessary
+        }
+      } catch (e) {
+        print("Error loading pets: $e");
+        pets = [defaultPet]; // Reset if there's an issue
+        notifyListeners();
+      }
+    } else {
+      pets = [defaultPet]; // Default if no pets saved
+      notifyListeners();
+    }
   }
 
   Pet get selectedPet => pets[petIndex];
+
+  Future<void> setName(String newName) async {
+    if (name != newName) {
+      name = newName;
+
+      await prefs.setString("name", name);
+
+      // 🔥 Update FirebaseAuth display name if logged in
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await user.updateProfile(displayName: name);
+      }
+      notifyListeners();
+    }
+  }
+
+
 
   void changeIndex(int idx){
     currentPageIndex = idx;
@@ -106,27 +230,29 @@ class MyAppState extends ChangeNotifier {
     required bool neuteredSpayed,
   }) async {
     try {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid != null) {
-      // 🔥 Directly push user-entered info to Firestore
-      final docRef = await FirebaseFirestore.instance.collection('pets').add({
-        'name': name,
-        'breed': breed,
-        'weight': weight,
-        'age': age,
-        'neuteredSpayed': neuteredSpayed,
-        'ownerUID': uid  // 🔥 Save owner's UID for filtering later
-      });
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        // 🔥 Directly push user-entered info to Firestore
+        final docRef = await FirebaseFirestore.instance.collection('pets').add({
+          'name': name,
+          'breed': breed,
+          'weight': weight,
+          'age': age,
+          'neuteredSpayed': neuteredSpayed,
+          'ownerUID': uid, 
+          'calorieIntake':0,
+          'nutritionalIntake': Pet.initializeIntake(),
+        });
 
-      print("Pet added to Firestore with ID: ${docRef.id}");
-    } else {
-      print("User is not logged in!");
+        print("Pet added to Firestore with ID: ${docRef.id}");
+      } else {
+        print("User is not logged in!");
+      }
+      await getPets(true);
+      notifyListeners();
+    } catch (e) {
+      print("Error adding pet to Firestore: $e");
     }
-  } catch (e) {
-    print("Error adding pet to Firestore: $e");
-  }
-    await getPets();
-    notifyListeners();
   }
 
   void removePet(int index) {
@@ -144,7 +270,7 @@ class MyAppState extends ChangeNotifier {
   }
 
   void updatePetIntake(Pet pet, Map<String, double> updatedValues) {
-    pet.addFood(updatedValues);
+    pet.addFood(updatedValues, this);
     scannedFoodData = {}; // Update the pet's intake
     notifyListeners(); // Notify UI about changes
   }
@@ -154,28 +280,36 @@ class MyAppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> getPets() async {
+  Future<void> getPets(bool petAdded) async {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
+      final String? petsData = prefs.getString("pets");
+
+      if (petsData != null && petsData.isNotEmpty && !petAdded) {
+        List<dynamic> decodedPets = jsonDecode(petsData);
+        pets = decodedPets.map((pet) => Pet.fromJson(pet)).toList();
+        print("Pets loaded from SharedPreferences");
+        notifyListeners();
+        return;
+      }
+
       if (uid != null) {
         final snapshot = await FirebaseFirestore.instance
             .collection('pets')
             .where("ownerUID", isEqualTo: uid)  // Filter by user ID if needed
             .get();
 
+        print(FirebaseAuth.instance.currentUser?.displayName);
+
         if (snapshot.docs.isNotEmpty){
           pets = snapshot.docs.map((doc) {
             final data = doc.data();
 
             // Create a Pet object for each document
-            return Pet(
-              name: data['name'],
-              breed: data['breed'],
-              weight: data['weight'],
-              age: data['age'],
-              neutered_spayed: data['neuteredSpayed'],
-            );
+            return Pet.fromJson(data);
           }).toList();
+          await prefs.setString("pets", jsonEncode(pets.map((pet) => pet.toJson()).toList()));
+          notifyListeners();
         }
         notifyListeners();   // Notify listeners to update UI
         print("Pets fetched successfully: ${pets.length} pets.");
@@ -184,16 +318,55 @@ class MyAppState extends ChangeNotifier {
       print("Error fetching pets: $e");
     }
   }
+
+  Future<void> updateLocalPetData() async {
+   try {
+     await prefs.setString("pets", jsonEncode(pets.map((pet) => pet.toJson()).toList()));
+     print("✅ SharedPreferences updated for modified pet!");
+     notifyListeners();
+   } catch (e) {
+     print("❌ Error updating SharedPreferences: $e");
+     notifyListeners();
+   }
+ }
+
   
   void signOut() async {
     await FirebaseAuth.instance.signOut();
     changeEnterAccountIndex(0);
-    name = "Guest";
     selectPet(0);
+    await prefs.clear();
+    printSharedPreferences();
     pets = [defaultPet];
+    print(pets);
     setNeedsToEnterName(false);
     notifyListeners();
   }
+  
+void printSharedPreferences() {
+  print("📂 Checking SharedPreferences Content...");
+
+  // ✅ Manually check and print each known key
+  if (prefs.containsKey("name")) {
+    print("🔹 Name: ${prefs.getString("name")}");
+  } else {
+    print("⚠️ Name key not found in SharedPreferences.");
+  }
+
+  if (prefs.containsKey("pets")) {
+    print("🔹 Pets: ${prefs.getString("pets")}");
+  } else {
+    print("⚠️ Pets key not found in SharedPreferences.");
+  }
+
+  // ✅ If you store additional keys, add them here
+  print("✅ Finished checking SharedPreferences.");
+}
+
+
+
+// Call this function inside notifyListeners() or anywhere in the UI where you want to debug
+
 
   Future<void> fetchBarcodeData(String barcode) async {
     final url = 'https://world.openfoodfacts.org/api/v3/product/$barcode.json';
@@ -248,5 +421,4 @@ class MyAppState extends ChangeNotifier {
 
     notifyListeners(); // Update UI
 }
-
 }

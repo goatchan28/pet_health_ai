@@ -1,5 +1,9 @@
 import "dart:math";
 
+import "package:cloud_firestore/cloud_firestore.dart";
+import "package:firebase_auth/firebase_auth.dart";
+import "package:pet_health_ai/models/app_state.dart";
+
 class Pet {
   final String name;
   final String breed;
@@ -25,6 +29,31 @@ class Pet {
        nutritionalIntake = nutritionalIntake ?? initializeIntake() {
     _calculateNutritionalRequirements(); // Step 2: Compute nutritional requirements based on calorieRequirement
     updateCarbohydrateRequirement(); // Step 3: Adjust carbohydrates dynamically
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'breed': breed,
+      'weight': weight,
+      'age': age,
+      'neuteredSpayed': neutered_spayed,
+      'calorieIntake': calorieIntake,
+      'nutritionalIntake': nutritionalIntake
+    };
+  }
+
+  // ✅ Create Pet object from JSON
+  factory Pet.fromJson(Map<String, dynamic> json) {
+    return Pet(
+      name: json['name'],
+      breed: json['breed'],
+      weight: (json['weight'] as num).toDouble(),
+      age: (json['age'] as num).toDouble(),
+      neutered_spayed: json['neuteredSpayed'],
+      calorieIntake: (json['calorieIntake'] ?? 0).toDouble(),
+      nutritionalIntake: Map<String, double>.from(json['nutritionalIntake'] ?? initializeIntake()),
+    );
   }
 
   // Function to calculate calorie requirements based on weight
@@ -183,23 +212,58 @@ class Pet {
     nutritionalRequirements["Carbohydrates"] = carbCalories / 4; // Convert to grams
   }
 
-  // Method to add food and update daily intake + calorie intake
-  void addFood(Map<String, double> foodNutrition) {
-    foodNutrition.forEach((key, value) {
-      if (key == "Calories") {
-        calorieIntake += value; // Update calorie intake
-      } else {
-        nutritionalIntake[key] = (nutritionalIntake[key] ?? 0) + value;
-      }
-    });
-  }
+  Future<void> addFood(Map<String, double> foodNutrition, MyAppState appState) async {
+   try{
+     String? petID = await getCurrentPetID();
+     if (petID == null) {
+       print("❌ Cannot update food intake - Pet not found!");
+       return;
+     }
+     final petRef = FirebaseFirestore.instance.collection("pets").doc(petID);
+     Map<String, dynamic> updateData = {};
+    
+     foodNutrition.forEach((key, value) {
+       if (key == "Calories") {
+         calorieIntake += value;
+         updateData["calorieIntake"] = calorieIntake;
+       } else {
+         nutritionalIntake[key] = (nutritionalIntake[key] ?? 0) + value;
+         updateData["nutritionalIntake.$key"] = nutritionalIntake[key]; // 🔥 Update nested field
+       }
+     });
+     await petRef.update(updateData);
+     print("✅ Nutritional intake updated for pet: $name (ID: $petID)");
+     await appState.updateLocalPetData();
+   }
+   catch(e){
+     print("❌ Cannot update food intake");
+   }
+ }
 
-  // Reset daily intake (e.g., at midnight)
-  void resetDailyIntake() {
-    nutritionalIntake.updateAll((key, value) => 0);
-    calorieIntake = 0; // Reset calorie count
-  }
+  Future<String?> getCurrentPetID() async {
+   try{
+     final uid = FirebaseAuth.instance.currentUser?.uid;
+     final petRef = await FirebaseFirestore.instance
+       .collection("pets")
+       .where("ownerUID", isEqualTo: uid)
+       .where("name", isEqualTo: name)
+       .limit(1)
+       .get();
 
+
+     if (petRef.docs.isEmpty) {
+       print("❌ No pet found with name '$name' for user '$uid'");
+       return null;
+     }
+
+     return petRef.docs.first.id;
+   }
+   catch(e){
+     print("❌ Error updating nutritional intake: $e");
+     return null;
+   }
+ }
+ 
   // Update pet’s weight and recalculate calorie requirements + nutrition
   void updateWeight(double newWeight) {
     weight = newWeight;

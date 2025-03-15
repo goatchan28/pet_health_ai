@@ -19,17 +19,21 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(const MyApp());
+
+  final appState = MyAppState();
+  await appState.init();
+  runApp(MyApp(appState: appState));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final MyAppState appState;
+  const MyApp({super.key, required this.appState});
 
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => MyAppState(),
+    return ChangeNotifierProvider.value(
+      value: appState,
       child: MaterialApp(
           title: 'Pet Health AI',
           theme: ThemeData(
@@ -50,14 +54,6 @@ class MyApp extends StatelessWidget {
               if (appState.needsToEnterName) {
                 return const EnterNamePage();
               } else {
-                if (appState.name == "Guest") {
-                  final user = FirebaseAuth.instance.currentUser;
-                  if (user != null) {
-                    print(FirebaseAuth.instance.currentUser?.uid);
-                    appState.getPets();
-                    fetchAndSetName(context);
-                  }
-                }
                 return const MyHomePage();
               }
             } else {
@@ -81,6 +77,11 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     var appState = context.watch<MyAppState>();
+
+    print("🔄 UI Rebuilt - Current SharedPreferences:");
+    appState.printSharedPreferences(); 
+    print(appState.pets);
+
     Pet selectedPet = appState.selectedPet;
     Widget page;
     switch(appState.currentPageIndex){

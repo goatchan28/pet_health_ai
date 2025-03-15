@@ -32,9 +32,17 @@ class _LoginPageState extends State<LoginPage> {
         email: emailController.text.trim(), 
         password: passwordController.text.trim()
       );
-      print(userCredential.user);
+      final user = userCredential.user;
+
+      if (user == null) {
+        print("Error: User not found after login.");
+        return;
+      }
+      
+      String thisName = user.displayName ?? "Guest";
       appState.changeIndex(2);
-      await appState.getPets();
+      await appState.setName(thisName);
+      await appState.getPets(false);
     }
     on FirebaseAuthException catch (e){
       print(e.message);

@@ -37,7 +37,6 @@ class _SignUpPageState extends State<SignUpPage> {
       if (!mounted) return;
       var appState = context.read<MyAppState>();
       appState.setNeedsToEnterName(true);  
-      await appState.getPets();   
     }
     on FirebaseAuthException catch (e){
       print(e.message);
