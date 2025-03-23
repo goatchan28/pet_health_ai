@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pet_health_ai/widgets/progress_pic.dart';
 import 'package:provider/provider.dart';
 import 'package:pet_health_ai/models/pet.dart';
 import 'package:pet_health_ai/models/app_state.dart';
@@ -118,22 +119,40 @@ class _HomePageState extends State<HomePage> {
             child: Row(
               children: [
                 SizedBox(height: 400, width:20),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    height:400,
-                    width: (MediaQuery.of(context).size.width-50)/2,
-                    color: theme.colorScheme.onPrimary,
-                  ),
+                Stack(
+                  alignment: AlignmentDirectional.topCenter,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        height:400,
+                        width: (MediaQuery.of(context).size.width-50)/2,
+                        color: theme.colorScheme.onPrimary,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: (){}, 
+                      child: Text("Log Meals", style: TextStyle(fontSize:16),)
+                    )
+                  ]
                 ),
                 SizedBox(height: 400, width:10),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    height:400,
-                    width: (MediaQuery.of(context).size.width-50)/2,
-                    color: theme.colorScheme.onPrimary,
-                  ),
+                Stack(
+                  alignment: AlignmentDirectional.topCenter,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        height:400,
+                        width: (MediaQuery.of(context).size.width-50)/2,
+                        color: theme.colorScheme.onPrimary,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: (){}, 
+                      child: Text("Log Exercise", style:TextStyle(fontSize: 16))
+                    )
+                  ]
                 ),
                 SizedBox(height: 400, width:20),
               ],
@@ -148,7 +167,7 @@ class _HomePageState extends State<HomePage> {
                     onPressed: () {
                       appState.changeIndex(1);
                     },
-                    child: Text('Progress Tracking'),
+                    child: Text('Buddy\'s Progress'),
                   ),
                 ),
                 SizedBox(height:20),
@@ -157,71 +176,11 @@ class _HomePageState extends State<HomePage> {
           ),
           SliverToBoxAdapter(
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                SizedBox(height: 160, width:8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    height:160,
-                    width: (MediaQuery.of(context).size.width)/2-10.5,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-                SizedBox(height: 160, width:5),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    height:160,
-                    width: (MediaQuery.of(context).size.width)/2-10.5,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-                SizedBox(height: 160, width:8),
-              ],
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Center(
-              child: Column(
-                children: [
-                  SizedBox(height: 20,),
-                  Text("Buddy's Progress"),
-                  SizedBox(height: 10,)
-                ],
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Row(
-              children: [
-                SizedBox(height: 200, width:16),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    height:200,
-                    width: (MediaQuery.of(context).size.width)/3-20,
-                    color: Colors.orange,
-                  ),
-                ),
-                SizedBox(height: 200, width:14),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    height:200,
-                    width: (MediaQuery.of(context).size.width)/3-20,
-                    color: Colors.orange,
-                  ),
-                ),
-                SizedBox(height: 200, width:14),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    height:200,
-                    width: (MediaQuery.of(context).size.width)/3-20,
-                    color: Colors.orange,
-                  ),
-                ),
-                SizedBox(height: 200, width:16),
+                ProgressPictureCard(date: '03-20-25', imageUrl: "assets/sigmalogo.png"),
+                ProgressPictureCard(date: '03-20-25', imageUrl: "assets/sigmalogo.png"),
+                ProgressPictureCard(date: '03-20-25', imageUrl: "assets/sigmalogo.png")
               ],
             ),
           ),
@@ -657,3 +616,4 @@ void _showMoreNutrientsPage(BuildContext context, Pet pet){
     }
   );
 }
+

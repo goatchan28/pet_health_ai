@@ -88,7 +88,7 @@ class _MyHomePageState extends State<MyHomePage> {
       case 0:
         page = HomePage(pet: selectedPet);
       case 1:
-        page = const ProgressTrackerPage();
+        page = ProgressTrackerPage(pet: selectedPet);
       case 2:
         page = const CameraPage();
       case 3:

@@ -13,6 +13,8 @@ class Pet {
   double calorieIntake;
   Map<String, double> nutritionalRequirements;
   Map<String, double> nutritionalIntake;
+  Map<String, dynamic>? weeklyNutrients;
+  List<Map<String, dynamic>>? vetStatistics;
   late double calorieRequirement; // Auto-calculated based on weight
 
   Pet({
@@ -22,11 +24,15 @@ class Pet {
     required this.age,
     required this.neutered_spayed,
     this.calorieIntake = 0,
+    List<Map<String, dynamic>>? vetStatistics,
     Map<String, double>? nutritionalRequirements, // Optional parameter
     Map<String, double>? nutritionalIntake,
+    Map<String, dynamic>? weeklyNutrients,
   }) : calorieRequirement = _calculateCalories(weight), // Step 1: Compute calorie requirement
        nutritionalRequirements = nutritionalRequirements ?? {}, // Initialize empty map first
-       nutritionalIntake = nutritionalIntake ?? initializeIntake() {
+       nutritionalIntake = nutritionalIntake ?? initializeIntake(), 
+       weeklyNutrients = weeklyNutrients ?? initializeWeeklyNutrients(),
+       vetStatistics = vetStatistics ?? [] {
     _calculateNutritionalRequirements(); // Step 2: Compute nutritional requirements based on calorieRequirement
     updateCarbohydrateRequirement(); // Step 3: Adjust carbohydrates dynamically
   }
@@ -39,7 +45,9 @@ class Pet {
       'age': age,
       'neuteredSpayed': neutered_spayed,
       'calorieIntake': calorieIntake,
-      'nutritionalIntake': nutritionalIntake
+      'nutritionalIntake': nutritionalIntake,
+      'weeklyNutrients': weeklyNutrients,
+      'vetStatistics': vetStatistics
     };
   }
 
@@ -53,6 +61,8 @@ class Pet {
       neutered_spayed: json['neuteredSpayed'],
       calorieIntake: (json['calorieIntake'] ?? 0).toDouble(),
       nutritionalIntake: Map<String, double>.from(json['nutritionalIntake'] ?? initializeIntake()),
+      weeklyNutrients: Map<String, dynamic>.from(json['weeklyNutrients'] ?? initializeWeeklyNutrients()),
+      vetStatistics: List<Map<String, dynamic>>.from(json['vetStatistics'])
     );
   }
 
@@ -107,6 +117,53 @@ class Pet {
     "Folic acid": 0,
     "Vitamin B12": 0,
     "Choline": 0
+    };
+  }
+
+  static Map<String, dynamic> initializeWeeklyNutrients() {
+    return {
+      "Monday": {
+        "Calories": 0,
+        "Carbohydrates": 0,
+        "Crude Fat": 0,
+        "Crude Protein": 0
+      },
+      "Tuesday": {
+        "Calories": 0,
+        "Carbohydrates": 0,
+        "Crude Fat": 0,
+        "Crude Protein": 0
+      },
+      "Wednesday": {
+        "Calories": 0,
+        "Carbohydrates": 0,
+        "Crude Fat": 0,
+        "Crude Protein": 0
+      },
+      "Thursday": {
+        "Calories": 0,
+        "Carbohydrates": 0,
+        "Crude Fat": 0,
+        "Crude Protein": 0
+      },
+      "Friday": {
+        "Calories": 0,
+        "Carbohydrates": 0,
+        "Crude Fat": 0,
+        "Crude Protein": 0
+      },
+      "Saturday": {
+        "Calories": 0,
+        "Carbohydrates": 0,
+        "Crude Fat": 0,
+        "Crude Protein": 0
+      },
+      "Sunday": {
+        "Calories": 0,
+        "Carbohydrates": 0,
+        "Crude Fat": 0,
+        "Crude Protein": 0
+      },
     };
   }
 
@@ -275,5 +332,51 @@ class Pet {
   void updateNutritionalRequirements() {
     _calculateNutritionalRequirements();
     updateCarbohydrateRequirement();
+  }
+  
+  Future<void> recordVetVisit({
+    required String date,
+    required double weight,
+    required double height,
+    required double bcs,
+    required double age,
+    required String notes,     
+    required MyAppState appState,   // Default to empty string if not provided
+    }) async {
+      try{
+      String? petID = await getCurrentPetID();
+      if (petID == null) {
+        print("❌ Cannot update food intake - Pet not found!");
+        return;
+      }
+      final petRef = FirebaseFirestore.instance.collection("pets").doc(petID);
+      Map<String, dynamic> visitVisitEntry = {
+        "date":date,  // Store date as a string (YYYY-MM-DD format recommended)
+        "weight": weight,
+        "height": height,
+        "bcs": bcs,
+        "age": age,
+        "notes": notes,
+      };
+        
+      await petRef.update({
+        "vetStatistics": FieldValue.arrayUnion([visitVisitEntry])
+      });
+
+      vetStatistics!.add({
+        "date":date,  // Store date as a string (YYYY-MM-DD format recommended)
+        "weight": weight,
+        "height": height,
+        "bcs": bcs,
+        "age": age,
+        "notes": notes,
+      });
+      
+      print("✅ Vet visit recorded successfully for $date!");
+      
+      await appState.updateLocalPetData();
+      print(vetStatistics);
+    }
+    catch(e){print(e);}
   }
 }

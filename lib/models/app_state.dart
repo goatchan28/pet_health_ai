@@ -1,9 +1,9 @@
 import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'pet.dart';
 import 'dart:convert';
 import "package:shared_preferences/shared_preferences.dart";
@@ -97,6 +97,7 @@ class MyAppState extends ChangeNotifier {
       }
 
       print("🌙 Running daily reset...");
+      await saveDailyNutrients();
       await resetAllPets(); // Reset for all users
 
       // 🔥 Save today's date (UTC) in Firestore
@@ -156,10 +157,8 @@ class MyAppState extends ChangeNotifier {
     hasLoadedData = true;
     String? savedName = prefs.getString("name") ?? "Guest";
 
-    if (savedName != name) { // Only update if different
-      name = savedName;
-      notifyListeners();
-    }
+    name = savedName;
+    notifyListeners();
 
     final String? petsData = prefs.getString("pets");
     if (petsData != null && petsData.isNotEmpty) {
@@ -184,19 +183,18 @@ class MyAppState extends ChangeNotifier {
   Pet get selectedPet => pets[petIndex];
 
   Future<void> setName(String newName) async {
-    if (name != newName) {
-      name = newName;
+    name = newName;
 
-      await prefs.setString("name", name);
+    await prefs.setString("name", name);
 
-      // 🔥 Update FirebaseAuth display name if logged in
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        await user.updateProfile(displayName: name);
-      }
-      notifyListeners();
+    // 🔥 Update FirebaseAuth display name if logged in
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await user.updateProfile(displayName: name);
     }
+    notifyListeners();
   }
+  
 
 
 
@@ -222,6 +220,74 @@ class MyAppState extends ChangeNotifier {
     }
   }
 
+  Future<void> saveDailyNutrients() async {
+    try {
+      final now = DateTime.now();
+      final yesterday = now.subtract(Duration(days:1));
+      final dayOfWeek = DateFormat('EEEE').format(yesterday);
+
+      print("📅 Saving daily nutrients for $dayOfWeek (yesterday)...");
+
+      final petCollection = FirebaseFirestore.instance.collection("pets");
+      final querySnapshot = await petCollection.get();
+
+      if (dayOfWeek == "Saturday"){
+         for (var doc in querySnapshot.docs){
+            final petDocRef = doc.reference;
+            await petDocRef.set(
+              {"weeklyNutrients": Pet.initializeWeeklyNutrients()}, SetOptions(merge:true)
+            );
+         }
+         if (pets.isNotEmpty) {
+          for (Pet pet in pets) {
+            pet.weeklyNutrients = Pet.initializeWeeklyNutrients();
+          } 
+          await updateLocalPetData();
+        }
+        print("It is Saturday! Reset weekly nutrients!");
+  
+        return;
+      }
+
+      for (var doc in querySnapshot.docs){
+        final petDocRef = doc.reference;
+        final petData = doc.data();
+
+        final intakeData = petData['nutritionalIntake'] as Map<String, dynamic>;
+
+        final double carbohydrates = (intakeData["Carbohydrates"] ?? 0).toDouble();
+        final double protein = (intakeData["Crude Protein"] ?? 0).toDouble();
+        final double fat = (intakeData["Crude Fat"] ?? 0).toDouble();
+        final double calorieIntake = petData["calorieIntake"].toDouble() ?? 0;
+
+        // Save daily intake
+        await petDocRef.update({
+          "weeklyNutrients.$dayOfWeek.Carbohydrates": carbohydrates,
+          "weeklyNutrients.$dayOfWeek.Crude Protein": protein,
+          "weeklyNutrients.$dayOfWeek.Crude Fat": fat,
+          "weeklyNutrients.$dayOfWeek.Calories": calorieIntake,
+        });
+
+
+        if (pets.isNotEmpty) {
+          for (Pet pet in pets) {
+            pet.weeklyNutrients![dayOfWeek]!["Carbohydrates"] = carbohydrates;
+            pet.weeklyNutrients![dayOfWeek]!["Crude Protein"] = protein;
+            pet.weeklyNutrients![dayOfWeek]!["Crude Fat"] = fat;
+            pet.weeklyNutrients![dayOfWeek]!["Calories"] = calorieIntake;
+          } 
+          await updateLocalPetData();
+        }
+
+        print("✅ Daily nutrients saved for pet ${doc.id} on $dayOfWeek!");
+      }
+      print("🎯 All pets' daily nutrients saved successfully!");
+    }
+    catch(e){
+      print("❌ Error saving daily nutrients: $e");
+    }
+  }
+
   Future<void> addPet({
     required String name,
     required String breed,
@@ -241,7 +307,9 @@ class MyAppState extends ChangeNotifier {
           'neuteredSpayed': neuteredSpayed,
           'ownerUID': uid, 
           'calorieIntake':0,
-          'nutritionalIntake': Pet.initializeIntake(),
+          'nutritionalIntake':Pet.initializeIntake(),
+          'weeklyNutrients':Pet.initializeWeeklyNutrients(),
+          'vetStatistics': []
         });
 
         print("Pet added to Firestore with ID: ${docRef.id}");
