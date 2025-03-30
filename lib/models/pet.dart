@@ -2,6 +2,7 @@ import "dart:math";
 
 import "package:cloud_firestore/cloud_firestore.dart";
 import "package:firebase_auth/firebase_auth.dart";
+import "package:intl/intl.dart";
 import "package:pet_health_ai/models/app_state.dart";
 
 class Pet {
@@ -15,6 +16,8 @@ class Pet {
   Map<String, double> nutritionalIntake;
   Map<String, dynamic>? weeklyNutrients;
   List<Map<String, dynamic>>? vetStatistics;
+  List<Map<String, dynamic>>? exerciseLog;
+  List<Map<String, dynamic>>? mealLog;
   late double calorieRequirement; // Auto-calculated based on weight
 
   Pet({
@@ -25,6 +28,8 @@ class Pet {
     required this.neutered_spayed,
     this.calorieIntake = 0,
     List<Map<String, dynamic>>? vetStatistics,
+    List<Map<String, dynamic>>? exerciseLog,
+    List<Map<String, dynamic>>? mealLog,
     Map<String, double>? nutritionalRequirements, // Optional parameter
     Map<String, double>? nutritionalIntake,
     Map<String, dynamic>? weeklyNutrients,
@@ -32,7 +37,9 @@ class Pet {
        nutritionalRequirements = nutritionalRequirements ?? {}, // Initialize empty map first
        nutritionalIntake = nutritionalIntake ?? initializeIntake(), 
        weeklyNutrients = weeklyNutrients ?? initializeWeeklyNutrients(),
-       vetStatistics = vetStatistics ?? [] {
+       vetStatistics = vetStatistics ?? [], 
+       exerciseLog = exerciseLog ?? [],
+       mealLog = mealLog ?? []{
     _calculateNutritionalRequirements(); // Step 2: Compute nutritional requirements based on calorieRequirement
     updateCarbohydrateRequirement(); // Step 3: Adjust carbohydrates dynamically
   }
@@ -47,7 +54,9 @@ class Pet {
       'calorieIntake': calorieIntake,
       'nutritionalIntake': nutritionalIntake,
       'weeklyNutrients': weeklyNutrients,
-      'vetStatistics': vetStatistics
+      'vetStatistics': vetStatistics,
+      'exerciseLog': exerciseLog,
+      'mealLog': mealLog
     };
   }
 
@@ -62,7 +71,9 @@ class Pet {
       calorieIntake: (json['calorieIntake'] ?? 0).toDouble(),
       nutritionalIntake: Map<String, double>.from(json['nutritionalIntake'] ?? initializeIntake()),
       weeklyNutrients: Map<String, dynamic>.from(json['weeklyNutrients'] ?? initializeWeeklyNutrients()),
-      vetStatistics: List<Map<String, dynamic>>.from(json['vetStatistics'])
+      vetStatistics: List<Map<String, dynamic>>.from(json['vetStatistics']),
+      exerciseLog: List<Map<String, dynamic>>.from(json['exerciseLog']),
+      mealLog: List<Map<String, dynamic>>.from(json['mealLog']),
     );
   }
 
@@ -269,8 +280,9 @@ class Pet {
     nutritionalRequirements["Carbohydrates"] = carbCalories / 4; // Convert to grams
   }
 
-  Future<void> addFood(Map<String, double> foodNutrition, MyAppState appState) async {
+  Future<void> addFood(Map<String, double> foodNutrition, String barcode, double amount, MyAppState appState) async {
    try{
+    print("🔍 Scanned Food Data: ${appState.scannedFoodData}");
      String? petID = await getCurrentPetID();
      if (petID == null) {
        print("❌ Cannot update food intake - Pet not found!");
@@ -290,6 +302,8 @@ class Pet {
      });
      await petRef.update(updateData);
      print("✅ Nutritional intake updated for pet: $name (ID: $petID)");
+
+     await logMeal(appState, barcode, amount);
      await appState.updateLocalPetData();
    }
    catch(e){
@@ -344,38 +358,114 @@ class Pet {
     required MyAppState appState,   // Default to empty string if not provided
     }) async {
       try{
+        String? petID = await getCurrentPetID();
+        if (petID == null) {
+          print("❌ Cannot record vet visit - Pet not found!");
+          return;
+        }
+        final petRef = FirebaseFirestore.instance.collection("pets").doc(petID);
+        Map<String, dynamic> visitVisitEntry = {
+          "date":date,  // Store date as a string (YYYY-MM-DD format recommended)
+          "weight": weight,
+          "height": height,
+          "bcs": bcs,
+          "age": age,
+          "notes": notes,
+        };
+          
+        await petRef.update({
+          "vetStatistics": FieldValue.arrayUnion([visitVisitEntry])
+        });
+
+        vetStatistics!.add({
+          "date":date,  // Store date as a string (YYYY-MM-DD format recommended)
+          "weight": weight,
+          "height": height,
+          "bcs": bcs,
+          "age": age,
+          "notes": notes,
+        });
+      
+        print("✅ Vet visit recorded successfully for $date!");
+        
+        await appState.updateLocalPetData();
+        print(vetStatistics);
+      }
+      catch(e){print(e);}
+    }
+
+  Future<void> logExercise({ 
+    required String exerciseType,
+    required double minutes,
+    required MyAppState appState, 
+  }) async{
+    final now = DateTime.now();
+    final formattedTime = DateFormat.Hm().format(now);
+    try{
       String? petID = await getCurrentPetID();
       if (petID == null) {
-        print("❌ Cannot update food intake - Pet not found!");
+        print("❌ Cannot log exercise - Pet not found!");
         return;
       }
+      double caloriesBurnt = 0; //will do the function later
       final petRef = FirebaseFirestore.instance.collection("pets").doc(petID);
-      Map<String, dynamic> visitVisitEntry = {
-        "date":date,  // Store date as a string (YYYY-MM-DD format recommended)
-        "weight": weight,
-        "height": height,
-        "bcs": bcs,
-        "age": age,
-        "notes": notes,
+      Map<String, dynamic> exerciseLogEntry = {
+        "date_time":formattedTime,  // Store date as a string (YYYY-MM-DD format recommended)
+        "exerciseType": exerciseType,
+        "minutes": minutes,
+        "caloriesBurnt": caloriesBurnt,
       };
         
       await petRef.update({
-        "vetStatistics": FieldValue.arrayUnion([visitVisitEntry])
+        "exerciseLog": FieldValue.arrayUnion([exerciseLogEntry])
       });
 
-      vetStatistics!.add({
-        "date":date,  // Store date as a string (YYYY-MM-DD format recommended)
-        "weight": weight,
-        "height": height,
-        "bcs": bcs,
-        "age": age,
-        "notes": notes,
+      exerciseLog!.add({
+        "date_time":formattedTime,  // Store date as a string (YYYY-MM-DD format recommended)
+        "exerciseType": exerciseType,
+        "minutes": minutes,
+        "caloriesBurnt": caloriesBurnt,
       });
-      
-      print("✅ Vet visit recorded successfully for $date!");
+    
+      print("✅ Exercise recorded successfully for $formattedTime!");
       
       await appState.updateLocalPetData();
-      print(vetStatistics);
+      print(exerciseLog);
+    }
+    catch(e){print(e);}
+  }
+
+  Future<void> logMeal( 
+    MyAppState appState,
+    String barcode,
+    double amount
+  ) async{
+    final now = DateTime.now();
+    final formattedTime = DateFormat.Hm().format(now);
+
+    try{
+      String? petID = await getCurrentPetID();
+      if (petID == null) {
+        print("❌ Cannot log meal - Pet not found!");
+        return;
+      }
+      final petRef = FirebaseFirestore.instance.collection("pets").doc(petID);
+      Map<String, dynamic> mealLogEntry = {
+        "date_time":formattedTime,  // Store date as a string (YYYY-MM-DD format recommended)
+        "barcode": barcode,
+        "amount":amount
+      };
+        
+      await petRef.update({
+        "mealLog": FieldValue.arrayUnion([mealLogEntry])
+      });
+
+      mealLog!.add(
+        mealLogEntry
+      );
+    
+      print("✅ Meal recorded successfully for $formattedTime!");
+      print(mealLog);
     }
     catch(e){print(e);}
   }

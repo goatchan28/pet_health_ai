@@ -12,7 +12,7 @@ class MyAppState extends ChangeNotifier {
   int currentPageIndex = 2;
   int enterAccountIndex = 0;
   int petIndex = 0;
-  Map<String, double> scannedFoodData = {};
+  Map<String, dynamic> scannedFoodData = {};
   bool barcodeNotFound = false;
   String name = "Guest";
   bool needsToEnterName = false;
@@ -124,7 +124,9 @@ class MyAppState extends ChangeNotifier {
       for (var doc in querySnapshot.docs) {
         await doc.reference.update({
           "calorieIntake": 0,
-          "nutritionalIntake": Pet.initializeIntake(), // Reset all nutrients to zero
+          "nutritionalIntake": Pet.initializeIntake(),
+          "mealLog":[],
+          "exerciseLog":[] // Reset all nutrients to zero
         });
       }
 
@@ -132,6 +134,8 @@ class MyAppState extends ChangeNotifier {
         for (Pet pet in pets) {
           pet.calorieIntake = 0;
           pet.nutritionalIntake = Pet.initializeIntake();
+          pet.mealLog = [];
+          pet.exerciseLog = [];
         }
         await updateLocalPetData();
       }
@@ -309,7 +313,9 @@ class MyAppState extends ChangeNotifier {
           'calorieIntake':0,
           'nutritionalIntake':Pet.initializeIntake(),
           'weeklyNutrients':Pet.initializeWeeklyNutrients(),
-          'vetStatistics': []
+          'vetStatistics': [],
+          'exerciseLog': [],
+          'mealLog':[]
         });
 
         print("Pet added to Firestore with ID: ${docRef.id}");
@@ -337,8 +343,8 @@ class MyAppState extends ChangeNotifier {
     }
   }
 
-  void updatePetIntake(Pet pet, Map<String, double> updatedValues) {
-    pet.addFood(updatedValues, this);
+  void updatePetIntake(Pet pet, Map<String, double> updatedValues, String barcode, double amount) {
+    pet.addFood(updatedValues, barcode, amount, this);
     scannedFoodData = {}; // Update the pet's intake
     notifyListeners(); // Notify UI about changes
   }
@@ -437,9 +443,21 @@ void printSharedPreferences() {
 
 
   Future<void> fetchBarcodeData(String barcode) async {
-    final url = 'https://world.openfoodfacts.org/api/v3/product/$barcode.json';
+    final url = 'https://world.openpetfoodfacts.org/api/v3/product/$barcode.json';
 
     try {
+      final querySnapshot = await FirebaseFirestore.instance
+        .collection('foods')
+        .where("barcode", isEqualTo: barcode)
+        .get();
+
+      if (querySnapshot.docs.isNotEmpty) {
+        print("✅ Found in Firestore");
+        scannedFoodData = querySnapshot.docs.first.data(); // Get first matching document
+        barcodeNotFound = false;
+        return;
+      }
+
       final response = await http.get(Uri.parse(url));
 
       if (response.statusCode == 200) {
@@ -449,29 +467,75 @@ void printSharedPreferences() {
 
         if (data['result']['id'] == "product_found") { // ✅ New v3 API response check
           final product = data['product'];
+          String brandName = product.containsKey('brands') ? product['brands'] : "Unknown Brand";
+          String productName = product.containsKey('product_name') ? product['product_name'] : "Unknown Product";
+          String nutritionDataPer = product['nutrition_data_per'] ?? "Unknown"; // "100g" or "serving"
+          String servingSizeStr = product['serving_size'] ?? "Unknown";
+          double? servingSizeGrams = _extractServingSize(servingSizeStr);
 
           if (product.containsKey('nutriments')) { // ✅ Ensure nutriments exist
             final nutriments = product['nutriments'] as Map<String, dynamic>;
-
             Map<String, double> extractedNutrients = {};
             
             nutriments.forEach((key, value) {
               if (value is num) {  // Ensure it's a number before adding
+                String per100gKey = "${key}_100g";
                 String? mappedKey = apiToAppNutrientMap[key];
                 if (mappedKey != null) {
-                  extractedNutrients[mappedKey] = value.toDouble();
+                  if (nutriments.containsKey(per100gKey) && nutriments[per100gKey] is num) {
+                    extractedNutrients[mappedKey] = nutriments[per100gKey].toDouble();
+                  }
+                  else{
+                    if (nutritionDataPer == "100g"){
+                      extractedNutrients[mappedKey] = value.toDouble();
+                    }
+                    else if (nutritionDataPer == "serving" && servingSizeGrams != null && servingSizeGrams > 0){
+                      double convertedValue = (value / servingSizeGrams) * 100;
+                      if (convertedValue > 0) extractedNutrients[mappedKey] = convertedValue;
+                    }
+                  }
                 }
               }
             });
+            if (extractedNutrients.isEmpty && product.containsKey('nutriments_estimated')) {
+              final nutrimentsEstimated = product['nutriments_estimated'] as Map<String, dynamic>;
 
-            scannedFoodData = extractedNutrients;
+              nutrimentsEstimated.forEach((key, value) {
+                if (value is num) {  // Ensure it's a number before adding
+                  String per100gKey = "${key}_100g";
+                  String? mappedKey = apiToAppNutrientMap[key];
+                  if (mappedKey != null) {
+                    if (nutrimentsEstimated.containsKey(per100gKey) && nutrimentsEstimated[per100gKey] is num) {
+                      extractedNutrients[mappedKey] = nutrimentsEstimated[per100gKey].toDouble();
+                    }
+                    else {
+                      if (nutritionDataPer == "100g") {
+                        extractedNutrients[mappedKey] = value.toDouble();
+                      }
+                      else if (nutritionDataPer == "serving" && servingSizeGrams != null && servingSizeGrams > 0) {
+                        double convertedValue = (value / servingSizeGrams) * 100;
+                        if (convertedValue > 0) extractedNutrients[mappedKey] = convertedValue;
+                      }
+                    }
+                  }
+                }
+              });
+            }
+
+            scannedFoodData = {
+              "productName": productName,
+              "brandName": brandName,
+              "nutritionalInfo": extractedNutrients,
+              "barcode": barcode
+            };
             barcodeNotFound = extractedNutrients.isEmpty;
           } else {
             print("Error: 'nutriments' missing from product data.");
             barcodeNotFound = true;
             scannedFoodData.clear();
           }
-        } else {
+        }
+        else {
           print("Error: Product not found.");
           barcodeNotFound = true;
           scannedFoodData.clear();
@@ -488,5 +552,54 @@ void printSharedPreferences() {
     }
 
     notifyListeners(); // Update UI
-}
+  }
+
+  double? _extractServingSize(String servingSizeStr) {
+    if (servingSizeStr.toLowerCase().contains("g")) {
+      return double.tryParse(servingSizeStr.replaceAll(RegExp(r'[^0-9.]'), ''));
+    } else if (servingSizeStr.toLowerCase().contains("oz")) {
+      return double.tryParse(servingSizeStr.replaceAll(RegExp(r'[^0-9.]'), ''))! * 28.3495;
+    }
+    return null; // Return null if we can't extract a valid serving size
+  }
+
+  Future<Map<String, dynamic>?> getFoodIntakeFromBarcode(String barcode, String unit, double amount) async {
+    Map<String, dynamic>? finalData;
+    await fetchBarcodeData(barcode);
+    if (barcodeNotFound == true){
+      return null;
+    }
+    else if (scannedFoodData.isNotEmpty){
+      if (scannedFoodData['nutritionalInfo'] != null && scannedFoodData['nutritionalInfo'].isNotEmpty){
+        Map<String, double> newNutrients = {};
+
+        if (unit == "Grams"){
+          scannedFoodData['nutritionalInfo'].forEach((key, value) {
+            newNutrients[key] = (value * amount) / 100; // ✅ Scale nutrients based on amount
+          }
+          );
+        }
+        else if (unit == "Cups"){
+          double conversionRate = 340;
+          if (scannedFoodData.containsKey("cupToGramConversion") 
+          && scannedFoodData["cupToGramConversion"] is num 
+          && scannedFoodData["cupToGramConversion"] > 0){
+            conversionRate = scannedFoodData["cupToGramConversion"];
+          }
+          scannedFoodData['nutritionalInfo'].forEach((key, value) {
+            newNutrients[key] = (value * amount * conversionRate) / 100; // ✅ Scale nutrients based on amount
+          }
+          );
+        }
+        finalData = {
+          "productName": scannedFoodData["productName"],
+          "brandName": scannedFoodData["brandName"],
+          "nutritionalInfo": newNutrients,
+          "amount": amount,
+          "barcode":barcode,
+        };
+      }
+    }
+    return finalData;
+  }
 }
