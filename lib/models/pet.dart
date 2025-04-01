@@ -18,6 +18,7 @@ class Pet {
   List<Map<String, dynamic>>? vetStatistics;
   List<Map<String, dynamic>>? exerciseLog;
   List<Map<String, dynamic>>? mealLog;
+  List<Map<String, dynamic>>? favoriteFoods;
   late double calorieRequirement; // Auto-calculated based on weight
 
   Pet({
@@ -30,6 +31,7 @@ class Pet {
     List<Map<String, dynamic>>? vetStatistics,
     List<Map<String, dynamic>>? exerciseLog,
     List<Map<String, dynamic>>? mealLog,
+    List<Map<String, dynamic>>? favoriteFoods,
     Map<String, double>? nutritionalRequirements, // Optional parameter
     Map<String, double>? nutritionalIntake,
     Map<String, dynamic>? weeklyNutrients,
@@ -39,7 +41,8 @@ class Pet {
        weeklyNutrients = weeklyNutrients ?? initializeWeeklyNutrients(),
        vetStatistics = vetStatistics ?? [], 
        exerciseLog = exerciseLog ?? [],
-       mealLog = mealLog ?? []{
+       mealLog = mealLog ?? [],
+       favoriteFoods = favoriteFoods ?? []{
     _calculateNutritionalRequirements(); // Step 2: Compute nutritional requirements based on calorieRequirement
     updateCarbohydrateRequirement(); // Step 3: Adjust carbohydrates dynamically
   }
@@ -56,7 +59,8 @@ class Pet {
       'weeklyNutrients': weeklyNutrients,
       'vetStatistics': vetStatistics,
       'exerciseLog': exerciseLog,
-      'mealLog': mealLog
+      'mealLog': mealLog,
+      'favoriteFoods':favoriteFoods
     };
   }
 
@@ -74,6 +78,7 @@ class Pet {
       vetStatistics: List<Map<String, dynamic>>.from(json['vetStatistics']),
       exerciseLog: List<Map<String, dynamic>>.from(json['exerciseLog']),
       mealLog: List<Map<String, dynamic>>.from(json['mealLog']),
+      favoriteFoods: List<Map<String, dynamic>>.from(json['favoriteFoods'])
     );
   }
 
@@ -280,7 +285,7 @@ class Pet {
     nutritionalRequirements["Carbohydrates"] = carbCalories / 4; // Convert to grams
   }
 
-  Future<void> addFood(Map<String, double> foodNutrition, String barcode, double amount, MyAppState appState) async {
+  Future<void> addFood(Map<String, double> foodNutrition, String barcode, String amount, MyAppState appState) async {
    try{
     print("🔍 Scanned Food Data: ${appState.scannedFoodData}");
      String? petID = await getCurrentPetID();
@@ -350,11 +355,10 @@ class Pet {
   
   Future<void> recordVetVisit({
     required String date,
-    required double weight,
-    required double height,
-    required double bcs,
-    required double age,
-    required String notes,     
+    double? weight,
+    double? height,
+    double? bcs,
+    String? notes,     
     required MyAppState appState,   // Default to empty string if not provided
     }) async {
       try{
@@ -369,20 +373,27 @@ class Pet {
           "weight": weight,
           "height": height,
           "bcs": bcs,
-          "age": age,
           "notes": notes,
         };
-          
-        await petRef.update({
-          "vetStatistics": FieldValue.arrayUnion([visitVisitEntry])
-        });
+        double? validWeight = double.tryParse(weight.toString());
+        if(validWeight != null){
+          updateWeight(validWeight);
+          await petRef.update({
+            "weight": weight,
+            "vetStatistics": FieldValue.arrayUnion([visitVisitEntry]),
+          });
+        }
+        else{
+          await petRef.update({
+            "vetStatistics": FieldValue.arrayUnion([visitVisitEntry]),
+          });
+        }
 
         vetStatistics!.add({
           "date":date,  // Store date as a string (YYYY-MM-DD format recommended)
           "weight": weight,
           "height": height,
           "bcs": bcs,
-          "age": age,
           "notes": notes,
         });
       
@@ -438,7 +449,7 @@ class Pet {
   Future<void> logMeal( 
     MyAppState appState,
     String barcode,
-    double amount
+    String amount
   ) async{
     final now = DateTime.now();
     final formattedTime = DateFormat.Hm().format(now);
@@ -468,5 +479,51 @@ class Pet {
       print(mealLog);
     }
     catch(e){print(e);}
+  }
+
+  Future<void> changeFavorites(String barcode, MyAppState appState)async{
+    try {
+      String? petID = await getCurrentPetID();
+      if (petID == null) {
+        print("❌ Cannot log meal - Pet not found!");
+        return;
+      }
+      if (barcode == "No Barcode") {
+        print("❌ Cannot favorite - no barcode!");
+        return;
+      }
+      final petRef = FirebaseFirestore.instance.collection("pets").doc(petID);
+
+      Map<String, dynamic>? existingFavorite = favoriteFoods!.firstWhere(
+        (food) => food["barcode"] == barcode,
+        orElse: () => {},
+      );
+
+      bool add = existingFavorite.isEmpty;
+
+      if (add == true){
+        await appState.fetchBarcodeData(barcode);
+        Map<String, dynamic> newFavorite = appState.scannedFoodData;
+        await petRef.update({
+          "favoriteFoods": FieldValue.arrayUnion([newFavorite])
+        });
+        favoriteFoods!.add(newFavorite);
+        appState.scannedFoodData = {};
+
+        print("✅ New favorite added successfully for $barcode!");
+        print(favoriteFoods);
+      }
+      else{
+        await petRef.update({
+          "favoriteFoods": FieldValue.arrayRemove([existingFavorite])
+        });
+        favoriteFoods!.remove(existingFavorite);
+        print("❌ Favorite removed for $barcode!");
+      }
+      await appState.updateLocalPetData();
+    }
+    catch(e){
+      print(e);
+    }
   }
 }

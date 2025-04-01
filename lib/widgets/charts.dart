@@ -246,7 +246,7 @@ class _LineChartState extends State<_LineChart> {
 
   DateTime parseDate(String date) {
     List<String> parts = date.split('-');
-
+    
     if (parts.length < 3) {
       throw FormatException("Invalid date format: $date");
     }
@@ -417,39 +417,48 @@ SideTitles leftTitles() => SideTitles(
   isStrokeCapRound: true,
   dotData: const FlDotData(show: true),
   belowBarData: BarAreaData(show: false),
-  spots: filteredStats.asMap().entries.map((entry) => FlSpot(
-    entry.key.toDouble(), // ✅ Now x-axis is recalculated
-    (entry.value["weight"] as num?)?.toDouble() ?? 0,
-  )).toList(),
-);
+  spots: filteredStats.asMap().entries
+    .where((entry) => entry.value["weight"] != null) // Only keep valid data
+    .map((entry) => FlSpot(
+      entry.key.toDouble(),
+      (entry.value["weight"] as num).toDouble(),
+    ))
+    .toList(),
+  );
 
   /// ✅ Height Data (sorted by date)
   LineChartBarData get heightData => LineChartBarData(
-        isCurved: false,
-        color: Colors.pink,
-        barWidth: 4,
-        isStrokeCapRound: true,
-        dotData: const FlDotData(show: true),
-        belowBarData: BarAreaData(show: false),
-        spots: filteredStats.asMap().entries.map((entry) => FlSpot(
-          entry.key.toDouble(), // ✅ Use index instead of raw milliseconds
-          (entry.value["height"] as num?)?.toDouble() ?? 0,
-        )).toList(),
-      );
+    isCurved: false,
+    color: Colors.pink,
+    barWidth: 4,
+    isStrokeCapRound: true,
+    dotData: const FlDotData(show: true),
+    belowBarData: BarAreaData(show: false),
+    spots: filteredStats.asMap().entries
+      .where((entry) => entry.value["height"] != null)
+      .map((entry) => FlSpot(
+        entry.key.toDouble(),
+        (entry.value["height"] as num).toDouble(),
+      ))
+      .toList(),
+  );
 
   /// ✅ BCS Data (sorted by date)
   LineChartBarData get bcsData => LineChartBarData(
-        isCurved: false,
-        color: Colors.cyan,
-        barWidth: 4,
-        isStrokeCapRound: true,
-        dotData: const FlDotData(show: true),
-        belowBarData: BarAreaData(show: false),
-        spots: filteredStats.asMap().entries.map((entry) => FlSpot(
-          entry.key.toDouble(), // ✅ Use index instead of raw milliseconds
-          (entry.value["bcs"] as num?)?.toDouble() ?? 0,
-        )).toList(),
-      );
+    isCurved: false,
+    color: Colors.cyan,
+    barWidth: 4,
+    isStrokeCapRound: true,
+    dotData: const FlDotData(show: true),
+    belowBarData: BarAreaData(show: false),
+    spots: filteredStats.asMap().entries
+    .where((entry) => entry.value["bcs"] != null)
+    .map((entry) => FlSpot(
+      entry.key.toDouble(),
+      (entry.value["bcs"] as num).toDouble(),
+    ))
+    .toList(),
+  );
 }
 
 class LineChartSample1 extends StatefulWidget {

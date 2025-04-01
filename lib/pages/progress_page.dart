@@ -80,62 +80,66 @@ class _ProgressTrackerPageState extends State<ProgressTrackerPage> {
 Future<void> showVetVisitDialog(BuildContext context, Pet pet) async {
   var appState = context.read<MyAppState>();
   Map<String, TextEditingController> controllers = {
-    "Date": TextEditingController(),
+    "Date(MM/DD/YY or MM-DD-YY)": TextEditingController(),
     "Weight": TextEditingController(),
     "Height": TextEditingController(),
     "BCS": TextEditingController(),
-    "Age": TextEditingController(),
     "Notes": TextEditingController(text: "Enter Any Notes"),
   };
 
   Map<String, String?> errors = {
-    "Date": null,
+    "Date(MM/DD/YY or MM-DD-YY)": null,
     "Weight": null,
     "Height": null,
     "BCS":null,
-    "Age": null,
     "Notes": null,
   };
 
   void validateAndSubmit() {
     errors.updateAll((key, value) => null); // Reset errors
 
-    String date = controllers["Date"]!.text.trim();
+    String date = controllers["Date(MM/DD/YY or MM-DD-YY)"]!.text.trim();
+    date = date.replaceAll("/", "-"); // ✅ Convert / to -
+    
     double? weight = double.tryParse(controllers["Weight"]!.text); 
     double? height = double.tryParse(controllers["Height"]!.text); 
     double? bcs = double.tryParse(controllers["BCS"]!.text);  
-    double? age = double.tryParse(controllers["Age"]!.text);  
     String notes = controllers["Notes"]!.text.trim();
 
     bool hasErrors = false;
 
-    if (date.isEmpty) {
-      errors["Date"] = "Enter a valid date.";
-      hasErrors = true;
-    }
-    if (weight == null || weight <= 0) { // Ensure valid weight
-      errors["Weight"] = "Enter a valid weight (kg).";
-      hasErrors = true;
-    }
-    if (height == null || height <= 0) { // Ensure valid weight
-      errors["Height"] = "Enter a valid height (in).";
-      hasErrors = true;
-    }
-    if (bcs == null || bcs <= 0 || bcs > 9) { // Ensure valid weight
-      errors["BCS"] = "Enter a valid BCS.";
-      hasErrors = true;
-    }
-    if (age == null || age <= 0) { // Ensure valid age
-      errors["Age"] = "Enter a valid age (months).";
+    final datePattern = RegExp(r'^(0[1-9]|1[0-2])[-/](0[1-9]|[12][0-9]|3[01])[-/](\d{2})$');
+
+    if (date.isEmpty || !datePattern.hasMatch(date)) {
+      errors["Date(MM/DD/YY or MM-DD-YY)"] = "Enter a valid date.";
       hasErrors = true;
     }
 
+    if (weight == null && height == null && bcs == null) {
+      errors["Weight"] = "Enter at least one: Weight, Height, or BCS.";
+      errors["Height"] = errors["Weight"];
+      errors["BCS"] = errors["Weight"];
+      hasErrors = true;
+    } else {
+      if (weight != null && weight <= 0) {
+        errors["Weight"] = "Enter a valid weight (kg).";
+        hasErrors = true;
+      }
+      if (height != null && height <= 0) {
+        errors["Height"] = "Enter a valid height (in).";
+        hasErrors = true;
+      }
+      if (bcs != null && (bcs <= 0 || bcs > 9)) {
+        errors["BCS"] = "Enter a valid BCS (1-9).";
+        hasErrors = true;
+      }
+    }
     if (hasErrors) {
       (context as Element).markNeedsBuild(); // Refresh UI to show errors
       return;
     }
 
-    pet.recordVetVisit(date:date, weight: weight!, height: height!, bcs: bcs!, age: age!, notes: notes, appState: appState);
+    pet.recordVetVisit(date:date, weight: weight, height: height, bcs: bcs, notes: notes, appState: appState);
     Navigator.pop(context);
   }
 
@@ -146,13 +150,13 @@ Future<void> showVetVisitDialog(BuildContext context, Pet pet) async {
         title: Text("Vet Visit"),
         content: SizedBox(
           width: double.maxFinite,
-          height:500,
+          height:350,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text("Record ${pet.name} 's Vet Visit", style: TextStyle(fontWeight: FontWeight.bold)),
               SizedBox(
-                height: 480,
+                height: 330,
                 child: ListView.builder(
                   shrinkWrap: true,
                   itemCount: controllers.length,
@@ -162,7 +166,7 @@ Future<void> showVetVisitDialog(BuildContext context, Pet pet) async {
                       padding: const EdgeInsets.symmetric(vertical: 5),
                       child: TextField(
                         controller: controllers[key],
-                        keyboardType: (key.contains("Date") || key.contains("Notes"))
+                        keyboardType: (key.contains("Date(MM/DD/YY or MM-DD-YY)") || key.contains("Notes"))
                             ? TextInputType.text
                             : TextInputType.number,
                         decoration: InputDecoration(

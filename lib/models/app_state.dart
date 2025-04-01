@@ -68,16 +68,6 @@ class MyAppState extends ChangeNotifier {
     "energy-kcal_100g": "Calories",
   };
 
-  final List<Map<String, dynamic>> favorites = [
-      {
-        "imageUrl": "https://image.chewy.com/is/image/catalog/48856_MAIN._AC_SL1200_V1723228820_.jpg",
-        "name": "Adult Sensitive Stomach Dog Food",
-        "brand": "Hill’s Science Diet",
-        "rating": "Good",
-        "ratingColor": Colors.green,
-      },
-    ];
-
   Future<void> scheduleDailyReset() async{
     final now = DateTime.now();
     final todayUtc = "${now.year}-${now.month}-${now.day}";
@@ -198,9 +188,6 @@ class MyAppState extends ChangeNotifier {
     }
     notifyListeners();
   }
-  
-
-
 
   void changeIndex(int idx){
     currentPageIndex = idx;
@@ -210,18 +197,6 @@ class MyAppState extends ChangeNotifier {
   void changeEnterAccountIndex(int idx){
     enterAccountIndex = idx;
     notifyListeners();
-  }
-
-  void addFavorite(Map<String, dynamic> item) {
-    favorites.add(item);
-    notifyListeners();
-  }
-
-  void removeFavorite(int index) {
-    if (index >= 0 && index < favorites.length) {
-      favorites.removeAt(index);
-      notifyListeners();
-    }
   }
 
   Future<void> saveDailyNutrients() async {
@@ -272,19 +247,18 @@ class MyAppState extends ChangeNotifier {
           "weeklyNutrients.$dayOfWeek.Calories": calorieIntake,
         });
 
-
-        if (pets.isNotEmpty) {
-          for (Pet pet in pets) {
-            pet.weeklyNutrients![dayOfWeek]!["Carbohydrates"] = carbohydrates;
-            pet.weeklyNutrients![dayOfWeek]!["Crude Protein"] = protein;
-            pet.weeklyNutrients![dayOfWeek]!["Crude Fat"] = fat;
-            pet.weeklyNutrients![dayOfWeek]!["Calories"] = calorieIntake;
-          } 
-          await updateLocalPetData();
-        }
-
         print("✅ Daily nutrients saved for pet ${doc.id} on $dayOfWeek!");
       }
+
+      if (pets.isNotEmpty) {
+        for (Pet pet in pets) {
+          pet.weeklyNutrients![dayOfWeek]!["Carbohydrates"] = (pet.nutritionalIntake["Carbohydrates"] ?? 0).toDouble();
+          pet.weeklyNutrients![dayOfWeek]!["Crude Protein"] = (pet.nutritionalIntake["Crude Protein"] ?? 0).toDouble();
+          pet.weeklyNutrients![dayOfWeek]!["Crude Fat"] = (pet.nutritionalIntake["Crude Fat"] ?? 0).toDouble();
+          pet.weeklyNutrients![dayOfWeek]!["Calories"] = (pet.calorieIntake).toDouble();
+        } 
+      }
+      await updateLocalPetData();
       print("🎯 All pets' daily nutrients saved successfully!");
     }
     catch(e){
@@ -315,7 +289,8 @@ class MyAppState extends ChangeNotifier {
           'weeklyNutrients':Pet.initializeWeeklyNutrients(),
           'vetStatistics': [],
           'exerciseLog': [],
-          'mealLog':[]
+          'mealLog':[],
+          'favoriteFoods':[]
         });
 
         print("Pet added to Firestore with ID: ${docRef.id}");
@@ -329,13 +304,6 @@ class MyAppState extends ChangeNotifier {
     }
   }
 
-  void removePet(int index) {
-    if (index >= 0 && index < favorites.length) {
-      pets.removeAt(index);
-      notifyListeners();
-    }
-  }
-
   void selectPet(int index) {
     if (index >= 0 && index < pets.length) {
       petIndex = index;
@@ -343,7 +311,7 @@ class MyAppState extends ChangeNotifier {
     }
   }
 
-  void updatePetIntake(Pet pet, Map<String, double> updatedValues, String barcode, double amount) {
+  void updatePetIntake(Pet pet, Map<String, double> updatedValues, String barcode, String amount) {
     pet.addFood(updatedValues, barcode, amount, this);
     scannedFoodData = {}; // Update the pet's intake
     notifyListeners(); // Notify UI about changes
@@ -565,7 +533,15 @@ void printSharedPreferences() {
 
   Future<Map<String, dynamic>?> getFoodIntakeFromBarcode(String barcode, String unit, double amount) async {
     Map<String, dynamic>? finalData;
-    await fetchBarcodeData(barcode);
+    bool isFavorite = selectedPet.favoriteFoods!
+      .any((food) => food["barcode"] == barcode);
+    if (!isFavorite){
+      await fetchBarcodeData(barcode);
+    }
+    else{
+      scannedFoodData = selectedPet.favoriteFoods!
+      .firstWhere((food) => food["barcode"] == barcode);
+    }
     if (barcodeNotFound == true){
       return null;
     }

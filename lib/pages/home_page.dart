@@ -107,7 +107,7 @@ class _HomePageState extends State<HomePage> {
               children: [
                 Center(
                   child: ElevatedButton(
-                    onPressed: () =>_showFeedDialog(context, widget.pet),
+                    onPressed: () =>showFeedDialog(context, widget.pet),
                     child: Text("Feed ${widget.pet.name}"),
                   ),
                 ),
@@ -119,9 +119,13 @@ class _HomePageState extends State<HomePage> {
             child: Row(
               children: [
                 SizedBox(height: 400, width:20),
-                Stack(
-                  alignment: AlignmentDirectional.topCenter,
+                Column(
                   children: [
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(foregroundColor: theme.primaryColor, backgroundColor:theme.secondaryHeaderColor),
+                      onPressed: () {showMealLogDialog(context, appState.selectedPet, appState);}, 
+                      child: Text("Meal Log", style:TextStyle(fontSize: 16))
+                    ),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(20),
                       child: Container(
@@ -161,12 +165,16 @@ class _HomePageState extends State<HomePage> {
                         ) : Center(child: Text("No meals logged yet")),
                       ),
                     ),
-                  ]
+                  ],
                 ),
                 SizedBox(height: 400, width:10),
-                Stack(
-                  alignment: AlignmentDirectional.topCenter,
+                Column(
                   children: [
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(foregroundColor: theme.primaryColor, backgroundColor: theme.secondaryHeaderColor),
+                      onPressed: ()  => _showExerciseLogDialog(context, widget.pet, appState), 
+                      child: Text("Log Exercise", style:TextStyle(fontSize: 16))
+                    ),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(20),
                       child: Container(
@@ -203,12 +211,7 @@ class _HomePageState extends State<HomePage> {
                         ) : Center(child: Text("No exercise logged yet")),
                       ),
                     ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(foregroundColor: theme.primaryColor, backgroundColor: Colors.red.shade100),
-                      onPressed: ()  => _showExerciseLogDialog(context, widget.pet, appState), 
-                      child: Text("Log Exercise", style:TextStyle(fontSize: 16))
-                    )
-                  ]
+                  ],
                 ),
                 SizedBox(height: 400, width:20),
               ],
@@ -353,21 +356,30 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-void _showFeedDialog(BuildContext context, Pet pet) {
+void showFeedDialog(BuildContext context, Pet pet, {String? selectedProductName}) {
   var appState = context.read<MyAppState>();
   TextEditingController barcodeController = TextEditingController();
   List<String> unitOptions = ["Grams", "Cups"];
   TextEditingController amountController = TextEditingController();
   String? unitChosen;
+  String? favoriteChosen = selectedProductName;
   Map<String, TextEditingController> manualControllers = {};
   int mode = 0;
   Map<String, dynamic>? foodData;
-
+  List favoriteProductNames = pet.favoriteFoods!.map((food) => food["productName"] ?? "Unknown Product").toList();
   manualControllers["Calories"] = TextEditingController(text: "0");
 
   pet.nutritionalRequirements.forEach((key, value) {
     manualControllers[key] = TextEditingController(text: "0"); // Initialize to 0
   });
+
+  if (selectedProductName != null) {
+    var selectedFood = pet.favoriteFoods!.firstWhere(
+      (food) => food["productName"] == selectedProductName,
+      orElse: () => {},
+    );
+    barcodeController.text = selectedFood["barcode"] ?? "";
+  }
 
   showDialog(
     context: context,
@@ -431,11 +443,57 @@ void _showFeedDialog(BuildContext context, Pet pet) {
                           )
                         ),
                         Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 5),
+                          child: DropdownButtonFormField<String>(
+                            value: favoriteChosen,
+                            decoration: InputDecoration(
+                              labelText: "Choose Favorite Food",
+                              border: OutlineInputBorder(),
+                            ),
+                            items: favoriteProductNames.map((productName) {
+                              return DropdownMenuItem<String>(
+                                value: productName,
+                                child: SizedBox(
+                                  width: 225,
+                                  child: Text(productName, overflow: TextOverflow.ellipsis,)
+                                ),
+                            );
+                            }).toList(),
+                            onChanged: (String? newValue){
+                              setState(() {
+                                favoriteChosen = newValue;
+                                // ✅ Find the barcode corresponding to the selected favorite food
+                                var selectedFood = pet.favoriteFoods!.firstWhere(
+                                  (food) => food["productName"] == newValue,
+                                  orElse: () => {},
+                                );
+                                barcodeController.text = selectedFood["barcode"] ?? "";
+                              });
+                            }
+                          )
+                        ),
+                        Padding(
                           padding: const EdgeInsets.all(8.0),
                           child: TextField(
                             controller: amountController,
                             keyboardType: TextInputType.number,
                             decoration: InputDecoration(labelText: "Enter Amount"),
+                            onSubmitted: (amount) async {
+                              if (unitChosen == null || barcodeController.text.isEmpty) {
+                                print("❌ Error: Unit or barcode missing");
+                                return;
+                              }
+                              double? parsedAmount = double.tryParse(amountController.text);
+                              if (parsedAmount == null || parsedAmount <= 0) {
+                                print("❌ Error: Invalid amount entered");
+                                return;
+                              }
+                              String? barcode = barcodeController.text;
+                              appState.barcodeNotFound = false;
+                              foodData = await appState.getFoodIntakeFromBarcode(barcode, unitChosen!, parsedAmount);
+                              print("barcodeNotFound status: ${appState.barcodeNotFound}");
+                              setState(() {});
+                            },
                           ),
                         ),
                         Padding(
@@ -454,6 +512,7 @@ void _showFeedDialog(BuildContext context, Pet pet) {
                                 print("❌ Error: Invalid amount entered");
                                 return;
                               }
+                              appState.barcodeNotFound = false;
                               foodData = await appState.getFoodIntakeFromBarcode(barcode, unitChosen!, amount);
                               print("barcodeNotFound status: ${appState.barcodeNotFound}");
                               setState(() {});
@@ -511,6 +570,25 @@ void _showFeedDialog(BuildContext context, Pet pet) {
                             decoration: InputDecoration(labelText: "Enter Amount"),
                           ),
                         ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 5),
+                          child: DropdownButtonFormField<String>(
+                            value: unitChosen,
+                            decoration: InputDecoration(
+                              labelText: "Choose Unit",
+                              border: OutlineInputBorder(),
+                            ),
+                            items: unitOptions.map((unit) {
+                              return DropdownMenuItem<String>(
+                                value: unit,
+                                child: Text(unit),
+                            );
+                            }).toList(),
+                            onChanged: (String? newValue){
+                              unitChosen = newValue;
+                            }
+                          )
+                        ),
                         Text(
                           "Enter Nutrients and Calories",
                           style: TextStyle(fontWeight: FontWeight.bold),
@@ -549,7 +627,7 @@ void _showFeedDialog(BuildContext context, Pet pet) {
               ElevatedButton(
                 onPressed: () {
                   if ((mode == 0) && foodData != null) {
-                    appState.updatePetIntake(pet, foodData!['nutritionalInfo'], foodData!['barcode'], foodData!['amount']);
+                    appState.updatePetIntake(pet, foodData!['nutritionalInfo'], foodData!['barcode'], "${foodData!['amount']} $unitChosen");
                     appState.barcodeNotFound = false;
                     setState(() {}); // Refresh UI
                     Navigator.pop(context);
@@ -567,7 +645,11 @@ void _showFeedDialog(BuildContext context, Pet pet) {
                       print("❌ Error: Invalid amount entered");
                       return;
                     }
-                    appState.updatePetIntake(pet, updatedValues, "No Barcode", amount);
+                    else if (unitChosen == null){
+                      print("❌ Error: No unit chosen");
+                      return;
+                    }
+                    appState.updatePetIntake(pet, updatedValues, "No Barcode", "$amount $unitChosen");
                     appState.barcodeNotFound = false;
                     setState(() {}); // Refresh UI
                     Navigator.pop(context);
@@ -801,7 +883,105 @@ void _showMoreNutrientsPage(BuildContext context, Pet pet){
   );
 }
 
-Future<void> showProductDialog(BuildContext context, String barcode, double amount, MyAppState appState) async {
+void showMealLogDialog(BuildContext context, Pet pet, MyAppState appState){
+  List<Map<String, dynamic>>? mealLog = pet.mealLog;
+  if (mealLog == null || mealLog.isEmpty) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Meal Log"),
+        content: Text("No meals logged."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Close"),
+          ),
+        ],
+      ),
+    );
+    return;
+  }
+
+  List<Map<String, dynamic>> reversedMealLog = List.from(mealLog.reversed);
+
+  showDialog(
+    context: context, 
+    builder: (context){
+      return AlertDialog(
+        title: Text("Meal Log"),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: reversedMealLog.map((meal) {
+              return FutureBuilder<void>(
+                future: () async {
+                  appState.scannedFoodData = {};
+                  appState.barcodeNotFound = false;
+
+                  await appState.fetchBarcodeData(meal["barcode"]);
+
+                  return appState.scannedFoodData.isNotEmpty
+                      ? Map<String, dynamic>.from(appState.scannedFoodData)
+                      : null;
+                }(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return Card(
+                      margin: EdgeInsets.symmetric(vertical: 8),
+                      child: ListTile(
+                        title: Text("Fetching data..."),
+                        subtitle: Text("Barcode: ${meal["barcode"]}"),
+                      ),
+                    );
+                  }
+
+                  if (appState.barcodeNotFound || appState.scannedFoodData.isEmpty) {
+                    return Card(
+                      margin: EdgeInsets.symmetric(vertical: 8),
+                      child: ListTile(
+                        title: Text("Product not found"),
+                        subtitle: Text("Barcode: ${meal["barcode"]}"),
+                      ),
+                    );
+                  }
+
+                  final Map<String, dynamic> productData = snapshot.data as Map<String, dynamic>;
+
+                  String productName = productData["productName"] as String? ?? "Unknown Product";
+                  String brandName = productData["brandName"] as String? ?? "Unknown Brand";
+
+                  return Card(
+                    margin: EdgeInsets.symmetric(vertical: 8),
+                    child: ListTile(
+                      title: Text(productName, style: TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text("Brand: $brandName"),
+                          Text("Time: ${meal["date_time"]}"),
+                          Text("Amount: ${meal["amount"]}"),
+                          Text("Barcode: ${meal["barcode"]}"),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Close"),
+          ),
+        ],
+      );
+    }
+  );
+}
+
+Future<void> showProductDialog(BuildContext context, String barcode, String amount, MyAppState appState) async {
   await appState.fetchBarcodeData(barcode);
 
   if (!context.mounted) return;
@@ -811,64 +991,94 @@ Future<void> showProductDialog(BuildContext context, String barcode, double amou
   final brandName = scannedFoodData["brandName"] ?? "Unknown Brand";
   final nutritionalInfo = scannedFoodData["nutritionalInfo"] as Map<String, double>? ?? {};
 
+  bool isFavorite = appState.selectedPet.favoriteFoods!
+      .any((food) => food["barcode"] == barcode);
+
+  bool staticIsFavorite = appState.selectedPet.favoriteFoods!
+      .any((food) => food["barcode"] == barcode);
+      
+  bool isProcessing = false;
+
   await showDialog(
     context: context,
     builder: (context) {
-      return AlertDialog(
-        title: Row(
-          children: [
-            Flexible(
-              child: Text.rich(
-                TextSpan(
-                  text: '$productName\n', // First line with the product name
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                  children: [
+      return StatefulBuilder(
+        builder: (context, setDialogState)
+        {
+          return AlertDialog(
+            title: Row(
+              children: [
+                Flexible(
+                  child: Text.rich(
                     TextSpan(
-                      text: '($brandName)', // Second line with the brand name
-                      style: TextStyle(fontWeight: FontWeight.normal),
+                      text: '$productName\n', // First line with the product name
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                      children: [
+                        TextSpan(
+                          text: '($brandName)', // Second line with the brand name
+                          style: TextStyle(fontWeight: FontWeight.normal),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
+                SizedBox(width: 8), // Space between the product name/brand and the star
+                IconButton(
+                  icon: Icon(
+                    isFavorite ? Icons.star : Icons.star_border,
+                    color: Colors.amber,
+                    size: 50, // Gold color for the star
+                  ),
+                  onPressed: ()  {
+                    setDialogState(() {
+                      isFavorite = !isFavorite; // Toggle UI state
+                    });
+                  },
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Display barcode
+                  Text("Barcode: $barcode", style: TextStyle(fontWeight: FontWeight.bold)),
+                  SizedBox(height: 8), // Add some space before nutritional info
+                  Text("Amount: $amount", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 8),
+                  Text("Nutritional Information (per 100g):", style: TextStyle(fontWeight: FontWeight.bold)),
+                  if (nutritionalInfo.isNotEmpty)
+                    ...nutritionalInfo.entries.map((entry) {
+                      return Text("${entry.key}: ${entry.value.toStringAsFixed(2)}g");
+                    })
+                  else
+                    Text("No nutritional information available."),
+                ],
               ),
             ),
-            SizedBox(width: 8), // Space between the product name/brand and the star
-            Icon(
-              Icons.star_border, // Star icon (not interactive yet)
-              color: Colors.amber,
-              size: 50, // Gold color for the star
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Display barcode
-              Text("Barcode: $barcode", style: TextStyle(fontWeight: FontWeight.bold)),
-              SizedBox(height: 8), // Add some space before nutritional info
-              Text("Amount: $amount", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              SizedBox(height: 8),
-              Text("Nutritional Information (per 100g):", style: TextStyle(fontWeight: FontWeight.bold)),
-              if (nutritionalInfo.isNotEmpty)
-                ...nutritionalInfo.entries.map((entry) {
-                  return Text("${entry.key}: ${entry.value.toStringAsFixed(2)}g");
-                }).toList()
-              else
-                Text("No nutritional information available."),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              appState.scannedFoodData = {}; // ✅ Reset scanned food data
-              appState.barcodeNotFound = false;
-              Navigator.pop(context);
-            },
+            actions: [
+              TextButton(
+                onPressed: isProcessing ? null : () async {
+                  setDialogState(() {
+                    isProcessing = true; // Start processing
+                  });
 
-            child: Text('Close'),
-          ),
-        ],
+                  if (isFavorite!=staticIsFavorite){
+                    await appState.selectedPet.changeFavorites(barcode, appState);
+                  }
+                  setDialogState(() {
+                    isProcessing = false; // Done processing
+                  });
+                  appState.scannedFoodData = {}; // ✅ Reset scanned food data
+                  appState.barcodeNotFound = false;
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                },
+                child: Text('Close'),
+              ),
+            ],
+          );
+        }
       );
     },
   );

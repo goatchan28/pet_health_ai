@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:pet_health_ai/models/app_state.dart';
+import 'package:pet_health_ai/models/pet.dart';
+import 'package:pet_health_ai/pages/home_page.dart';
+import 'package:provider/provider.dart';
+
 
 class FoodPage extends StatelessWidget {
   const FoodPage({super.key});
@@ -34,114 +37,87 @@ class FavoritesFoodView extends StatelessWidget {
   const FavoritesFoodView({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    var appState = context.watch<MyAppState>();
-    
-    return Scaffold(
-      body: ListView.builder(
-        itemCount: appState.favorites.length,
-        itemBuilder: (context, index){
-          final item = appState.favorites[index];
-          return FavoriteItem(
-            imageUrl: item["imageUrl"],
-            name: item["name"],
-            brand: item["brand"],
-            rating: item["rating"],
-            ratingColor: item["ratingColor"],
+  Widget build(BuildContext context) {  
+    return Consumer<MyAppState>(
+      builder: (context, appState, child){
+        List<Map<String, dynamic>>? foodList = appState.selectedPet.favoriteFoods;
+        return Scaffold(
+          body: foodList!.isEmpty
+          ? const Center(child: Text("No favorite foods yet."))
+          : ListView.builder(
+              itemCount: foodList.length,
+              itemBuilder: (context, index) {
+                final food = foodList[index];
+                return FavoriteItem(
+                  food: food,
+                  appState: appState,
+                );
+              },
+            ),
           );
         }
-      )
-    );
+      );
+    }
   }
-}
 
 class FavoriteItem extends StatelessWidget {
-  final String imageUrl;
-  final String name;
-  final String brand;
-  final String rating;
-  final Color ratingColor;
+  final Map<String, dynamic> food;
+  final MyAppState appState;
 
   const FavoriteItem({
-    required this.imageUrl,
-    required this.name,
-    required this.brand,
-    required this.rating,
-    required this.ratingColor,
-    super.key,
+    super.key, required this.food, required this.appState,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      child: ListTile(
-        leading: Image.network(imageUrl, width: 55, height: 105, fit: BoxFit.cover),
-        isThreeLine: true,
-        dense: true,
-        title: Text(name, style: TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(brand, style: const TextStyle(color: Colors.grey)),
-            Row(
-              children: [
-                Icon(Icons.circle, color: ratingColor, size: 12),
-                const SizedBox(width: 5),
-                Text(rating, style: const TextStyle(fontSize: 12)),
-              ],
-            ),
-          ],
-        ),
-        trailing: Icon(Icons.arrow_circle_right),
-      )
+    String productName = food["productName"] ?? "Unknown Product";
+    String brandName = food["brandName"] ?? "Unknown Brand";
+    String barcode = food["barcode"] ?? "N/A";
+    String imageUrl = food["imageUrl"] ?? ""; // If you plan to store images\
+
+    return GestureDetector(
+      onTap: (){showFeedDialog(context, appState.selectedPet, selectedProductName: productName);},
+      child: Card(
+        margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        child: ListTile(
+          leading: imageUrl.isNotEmpty
+              ? Image.network(imageUrl, width: 55, height: 105, fit: BoxFit.cover)
+              : const Icon(Icons.rice_bowl, size: 55, color: Colors.grey), // Placeholder image,
+          isThreeLine: true,
+          dense: true,
+          title: Text(productName, style: TextStyle(fontWeight: FontWeight.bold)),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(brandName, style: const TextStyle(color: Colors.grey)),
+              const SizedBox(height: 5),
+              Text("Barcode: $barcode", style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+              const SizedBox(height: 5),
+            ],
+          ),
+          trailing: IconButton(
+            icon: Icon(Icons.star, color: Colors.amber),
+            onPressed: () async {
+              await appState.selectedPet.changeFavorites(barcode, appState);
+            },
+          ),
+        )
+      ),
     );
   }
+}
+
+void addFavoritesDialog(BuildContext context, Pet pet){
+
 }
 
 class RecommendedFoodView extends StatelessWidget {
   const RecommendedFoodView({super.key});
 
-  static const List<Map<String, dynamic>> featured = [
-    {
-      "imageUrl": "https://image.chewy.com/is/image/catalog/48856_MAIN._AC_SL1200_V1723228820_.jpg",
-      "title": "Beef Frozen Raw Dog Food",
-      "subtitle": "Blue Ridge",
-    },
-    {
-      "imageUrl": "https://image.chewy.com/is/image/catalog/48856_MAIN._AC_SL1200_V1723228820_.jpg",
-      "title": "Chicken Raw Dog Food",
-      "subtitle": "Farm Fresh",
-    },
-    {
-      "imageUrl": "https://image.chewy.com/is/image/catalog/48856_MAIN._AC_SL1200_V1723228820_.jpg",
-      "title": "Salmon Raw Dog Food",
-      "subtitle": "Sea Treats",
-    },
-  ];
-
-  static const List<Map<String, dynamic>> freshFood = [
-    {
-      "imageUrl": "https://image.chewy.com/is/image/catalog/48856_MAIN._AC_SL1200_V1723228820_.jpg",
-      "title": "Fresh Turkey Dog Food",
-      "subtitle": "Nature's Variety",
-    },
-    {
-      "imageUrl": "https://image.chewy.com/is/image/catalog/48856_MAIN._AC_SL1200_V1723228820_.jpg",
-      "title": "Fresh Beef Dog Food",
-      "subtitle": "Farm to Bowl",
-    },
-  ];
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: ListView(
-        children: [
-          RecommendedSection(title: "Featured", items: featured),
-          RecommendedSection(title: 'Fresh Food', items: freshFood)
-        ],
-      )
+      body: const Center(child: Text("Recommended Foods Section in Progress"))
     );
   }
 }
