@@ -359,7 +359,7 @@ class _HomePageState extends State<HomePage> {
 void showFeedDialog(BuildContext context, Pet pet, {String? selectedProductName}) {
   var appState = context.read<MyAppState>();
   TextEditingController barcodeController = TextEditingController();
-  List<String> unitOptions = ["Grams", "Cups"];
+  List<String> unitOptions = ["Grams", "Cups", "Ounces"];
   TextEditingController amountController = TextEditingController();
   String? unitChosen;
   String? favoriteChosen = selectedProductName;

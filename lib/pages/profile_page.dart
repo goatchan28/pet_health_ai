@@ -124,6 +124,11 @@ class ProfilePage extends StatelessWidget {
 Future<void> showAddPetDialog(BuildContext context) async {
   var appState = context.read<MyAppState>();
 
+  int mode = 0;
+
+  String desiredPetID = "";
+  TextEditingController petIDController = TextEditingController();
+
   Map<String, TextEditingController> controllers = {
     "Name": TextEditingController(),
     "Breed": TextEditingController(),
@@ -178,7 +183,7 @@ Future<void> showAddPetDialog(BuildContext context) async {
       return;
     }
 
-    appState.addPet(
+    appState.addPetManually(
       name: name,
       breed: breed,
       weight: weight!,
@@ -191,56 +196,115 @@ Future<void> showAddPetDialog(BuildContext context) async {
   await showDialog(
     context: context, 
     builder: (context) {
-      return AlertDialog(
-        title: Text("Add Pet"),
-        content: SizedBox(
-          width: double.maxFinite,
-          height:400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text("Enter Your Dog's Information", style: TextStyle(fontWeight: FontWeight.bold)),
-              SizedBox(
-                height: 350,
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: controllers.length,
-                  itemBuilder: (context, index) {
-                    String key = controllers.keys.elementAt(index);
-                    
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 5),
-                      child: TextField(
-                        controller: controllers[key],
-                        keyboardType: (key.contains("Weight") || key.contains("Age"))
-                            ? TextInputType.number
-                            : TextInputType.text,
+      return StatefulBuilder(
+        builder: (context, setState){
+          return AlertDialog(
+            title: Text("Add Pet"),
+            content: SizedBox(
+              width: double.maxFinite,
+              height:450,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      TextButton(
+                        onPressed: () => setState(() => mode = 0),
+                        child: Text(
+                          "Barcode Scan",
+                          style: TextStyle(
+                            fontWeight: mode == 0 ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => setState(() => mode = 1),
+                        child: Text(
+                          "Manual Entry",
+                          style: TextStyle(
+                            fontWeight: mode == 1 ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  Divider(), 
+
+                  if (mode == 0)
+                  Column(
+                    children: [
+                      TextField(
+                        controller: petIDController,
+                        keyboardType: TextInputType.text,
                         decoration: InputDecoration(
-                          labelText: key,
-                          errorText: errors[key], // Shows error message if invalid
+                          labelText: "Pet ID",
                         ),
                       )
-                    );
-                  }
-                )
+                    ],
+                  )
+                  else if (mode == 1)
+
+                  Column(
+                    children: [
+                      Text("Enter Your Dog's Information", style: TextStyle(fontWeight: FontWeight.bold)),
+                      SizedBox(
+                        height: 350,
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: controllers.length,
+                          itemBuilder: (context, index) {
+                            String key = controllers.keys.elementAt(index);
+                            
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 5),
+                              child: TextField(
+                                controller: controllers[key],
+                                keyboardType: (key.contains("Weight") || key.contains("Age"))
+                                    ? TextInputType.number
+                                    : TextInputType.text,
+                                decoration: InputDecoration(
+                                  labelText: key,
+                                  errorText: errors[key], // Shows error message if invalid
+                                ),
+                              )
+                            );
+                          }
+                        )
+                      )
+                    ],
+                  ),
+                ],
               )
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); 
+                },
+                child: Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (mode==0){
+                    desiredPetID = petIDController.text.trim();
+                    if (desiredPetID.isEmpty){
+                      print("Please enter a Pet ID");
+                      return;
+                    }
+                    appState.addPetID(desiredPetID);
+                    Navigator.pop(context);
+                  }
+                  if (mode==1){
+                    validateAndSubmit();
+                  }
+                },
+                child: Text("Enter"),
+              )  
             ],
-          )
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); 
-            },
-            child: Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              validateAndSubmit();
-            },
-            child: Text("Enter"),
-          )  
-        ],
+          );
+        },
       );
     },
   );

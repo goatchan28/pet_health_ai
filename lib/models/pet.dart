@@ -321,7 +321,7 @@ class Pet {
      final uid = FirebaseAuth.instance.currentUser?.uid;
      final petRef = await FirebaseFirestore.instance
        .collection("pets")
-       .where("ownerUID", isEqualTo: uid)
+       .where("ownerUID", arrayContains: uid)
        .where("name", isEqualTo: name)
        .limit(1)
        .get();

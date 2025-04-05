@@ -266,7 +266,7 @@ class MyAppState extends ChangeNotifier {
     }
   }
 
-  Future<void> addPet({
+  Future<void> addPetManually({
     required String name,
     required String breed,
     required double weight,
@@ -283,7 +283,7 @@ class MyAppState extends ChangeNotifier {
           'weight': weight,
           'age': age,
           'neuteredSpayed': neuteredSpayed,
-          'ownerUID': uid, 
+          'ownerUID': [uid], 
           'calorieIntake':0,
           'nutritionalIntake':Pet.initializeIntake(),
           'weeklyNutrients':Pet.initializeWeeklyNutrients(),
@@ -301,6 +301,38 @@ class MyAppState extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       print("Error adding pet to Firestore: $e");
+    }
+  }
+
+  Future<void> addPetID(String desiredPetID) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid!= null){
+      try {
+        final docRef = await FirebaseFirestore.instance.collection("pets").doc(desiredPetID);
+        final docSnapshot = await docRef.get();
+
+        // Check if the document exists
+        if (docSnapshot.exists) {
+          List<dynamic> ownerUIDs = docSnapshot.data()?["ownerUID"] ?? [];
+          // If the document exists, update the ownerUID array
+          if (!ownerUIDs.contains(uid)) {
+            // If the uid is not already in the ownerUID array, add it
+            await docRef.update({
+              "ownerUID": FieldValue.arrayUnion([uid]),
+            });
+            print("✅ Owner UID added successfully to pet $desiredPetID");
+          } else {
+            print("❌ Owner UID is already in the list.");
+          }
+        } else {
+          print("❌ Document with ID $desiredPetID does not exist.");
+        }
+        await getPets(true);
+        notifyListeners();
+      }
+      catch(e){
+        print("❌ Error adding owner UID to pet $desiredPetID: $e");
+      }
     }
   }
 
@@ -338,7 +370,7 @@ class MyAppState extends ChangeNotifier {
       if (uid != null) {
         final snapshot = await FirebaseFirestore.instance
             .collection('pets')
-            .where("ownerUID", isEqualTo: uid)  // Filter by user ID if needed
+            .where("ownerUID", arrayContains: uid)  // Filter by user ID if needed
             .get();
 
         print(FirebaseAuth.instance.currentUser?.displayName);
@@ -414,14 +446,14 @@ void printSharedPreferences() {
     final url = 'https://world.openpetfoodfacts.org/api/v3/product/$barcode.json';
 
     try {
-      final querySnapshot = await FirebaseFirestore.instance
+      DocumentSnapshot doc = await FirebaseFirestore.instance
         .collection('foods')
-        .where("barcode", isEqualTo: barcode)
+        .doc(barcode)
         .get();
 
-      if (querySnapshot.docs.isNotEmpty) {
+      if (doc.exists) {
         print("✅ Found in Firestore");
-        scannedFoodData = querySnapshot.docs.first.data(); // Get first matching document
+        scannedFoodData = doc.data() as Map<String, dynamic>;// Get first matching document
         barcodeNotFound = false;
         return;
       }
@@ -542,30 +574,68 @@ void printSharedPreferences() {
       scannedFoodData = selectedPet.favoriteFoods!
       .firstWhere((food) => food["barcode"] == barcode);
     }
+
     if (barcodeNotFound == true){
       return null;
     }
     else if (scannedFoodData.isNotEmpty){
-      if (scannedFoodData['nutritionalInfo'] != null && scannedFoodData['nutritionalInfo'].isNotEmpty){
-        Map<String, double> newNutrients = {};
-
-        if (unit == "Grams"){
-          scannedFoodData['nutritionalInfo'].forEach((key, value) {
-            newNutrients[key] = (value * amount) / 100; // ✅ Scale nutrients based on amount
-          }
-          );
-        }
-        else if (unit == "Cups"){
-          double conversionRate = 340;
-          if (scannedFoodData.containsKey("cupToGramConversion") 
+      double conversionRate = 1;
+      if (unit == "Cups"){
+        conversionRate = 340;
+        if (scannedFoodData.containsKey("cupToGramConversion") 
           && scannedFoodData["cupToGramConversion"] is num 
           && scannedFoodData["cupToGramConversion"] > 0){
             conversionRate = scannedFoodData["cupToGramConversion"];
+        }
+      }
+      else if (unit == "Ounces"){
+        conversionRate = 28.3495;
+          if (scannedFoodData.containsKey("ozToGramConversion") 
+          && scannedFoodData["ozToGramConversion"] is num 
+          && scannedFoodData["ozToGramConversion"] > 0){
+            conversionRate = scannedFoodData["ozToGramConversion"];
           }
+      }
+      else if (unit == "Grams"){
+        conversionRate = 1;
+      }
+
+      if (scannedFoodData['nutritionalInfo'] != null && scannedFoodData['nutritionalInfo'].isNotEmpty){
+        Map<String, double> newNutrients = {};
+
           scannedFoodData['nutritionalInfo'].forEach((key, value) {
             newNutrients[key] = (value * amount * conversionRate) / 100; // ✅ Scale nutrients based on amount
-          }
-          );
+          });
+          
+        finalData = {
+          "productName": scannedFoodData["productName"],
+          "brandName": scannedFoodData["brandName"],
+          "nutritionalInfo": newNutrients,
+          "amount": amount,
+          "barcode":barcode,
+        };
+      }
+      else if (scannedFoodData.containsKey("guaranteedAnalysis") 
+      && scannedFoodData["guaranteedAnalysis"] !=null
+      && scannedFoodData["guaranteedAnalysis"].isNotEmpty){
+        Map<String, double> newNutrients = {};
+        if (scannedFoodData.containsKey("moistureContent") 
+        && scannedFoodData["moistureContent"] is num 
+        && scannedFoodData["moistureContent"] >= 0 
+        && scannedFoodData["moistureContent"] <= 100){
+          double moistureContent = scannedFoodData["moistureContent"];  // Get moisture content
+          double dryMatterPercent = 100 - moistureContent;  // Dry matter is the complement of moisture content
+          
+          // Adjust the nutrient percentages based on the dry matter percentage
+          scannedFoodData['guaranteedAnalysis'].forEach((key, value) {
+            double adjustedPercentage = value / dryMatterPercent * 100;  // Adjust nutrient based on dry matter
+            newNutrients[key] = (adjustedPercentage * amount * conversionRate) / 100;  // Calculate actual grams for the given amount
+          });
+        }
+        else{
+          scannedFoodData['guaranteedAnalysis'].forEach((key, value) {
+            newNutrients[key] = (value * amount * conversionRate) / 100;  // Scale nutrients based on amount
+          });
         }
         finalData = {
           "productName": scannedFoodData["productName"],
@@ -577,5 +647,18 @@ void printSharedPreferences() {
       }
     }
     return finalData;
+  }
+
+  Future<void> writeFoodDatabase(String barcode, Map<String, dynamic> food) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('foods')
+          .doc(barcode) // Store under barcode
+          .set(food, SetOptions(merge: true)); // Merge prevents overwriting existing fields
+
+      print("✅ Food data saved under barcode: $barcode");
+    } catch (e) {
+      print("❌ Error writing to Firestore: $e");
+    }
   }
 }
