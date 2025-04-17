@@ -26,6 +26,49 @@ class MyAppState extends ChangeNotifier {
   }
 
   final Map<String, String> apiToAppNutrientMap = {
+    // ---- Bare keys ----
+    "proteins": "Crude Protein",
+    "arginine": "Arginine",
+    "histidine": "Histidine",
+    "isoleucine": "Isoleucine",
+    "leucine": "Leucine",
+    "lysine": "Lysine",
+    "methionine": "Methionine",
+    "methionine-cystine": "Methionine-cystine",
+    "phenylalanine": "Phenylalanine",
+    "phenylalanine-tyrosine": "Phenylalanine-tyrosine",
+    "threonine": "Threonine",
+    "tryptophan": "Tryptophan",
+    "valine": "Valine",
+    "fat": "Crude Fat",
+    "linoleic-acid": "Linoleic acid",
+    "calcium": "Calcium",
+    "phosphorus": "Phosphorus",
+    "potassium": "Potassium",
+    "sodium": "Sodium",
+    "chloride": "Chloride",
+    "magnesium": "Magnesium",
+    "iron": "Iron",
+    "copper": "Copper",
+    "manganese": "Manganese",
+    "zinc": "Zinc",
+    "iodine": "Iodine",
+    "selenium": "Selenium",
+    "vitamin-a": "Vitamin A",
+    "vitamin-d": "Vitamin D",
+    "vitamin-e": "Vitamin E",
+    "thiamin": "Thiamine",
+    "riboflavin": "Riboflavin",
+    "pantothenic-acid": "Pantothenic acid",
+    "niacin": "Niacin",
+    "vitamin-b6": "Pyridoxine",
+    "folic-acid": "Folic acid",
+    "vitamin-b12": "Vitamin B12",
+    "choline": "Choline",
+    "carbohydrates": "Carbohydrates",
+    "energy-kcal": "Calories",
+
+    // ---- _100g keys ----
     "proteins_100g": "Crude Protein",
     "arginine_100g": "Arginine",
     "histidine_100g": "Histidine",
@@ -67,6 +110,7 @@ class MyAppState extends ChangeNotifier {
     "carbohydrates_100g": "Carbohydrates",
     "energy-kcal_100g": "Calories",
   };
+
 
   Future<void> scheduleDailyReset() async{
     final now = DateTime.now();
@@ -308,7 +352,7 @@ class MyAppState extends ChangeNotifier {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid!= null){
       try {
-        final docRef = await FirebaseFirestore.instance.collection("pets").doc(desiredPetID);
+        final docRef = FirebaseFirestore.instance.collection("pets").doc(desiredPetID);
         final docSnapshot = await docRef.get();
 
         // Check if the document exists
@@ -440,8 +484,6 @@ void printSharedPreferences() {
 
 
 // Call this function inside notifyListeners() or anywhere in the UI where you want to debug
-
-
   Future<void> fetchBarcodeData(String barcode) async {
     final url = 'https://world.openpetfoodfacts.org/api/v3/product/$barcode.json';
 
@@ -454,6 +496,7 @@ void printSharedPreferences() {
       if (doc.exists) {
         print("✅ Found in Firestore");
         scannedFoodData = doc.data() as Map<String, dynamic>;// Get first matching document
+        scannedFoodData["barcode"] = barcode;
         barcodeNotFound = false;
         return;
       }
@@ -469,6 +512,7 @@ void printSharedPreferences() {
           final product = data['product'];
           String brandName = product.containsKey('brands') ? product['brands'] : "Unknown Brand";
           String productName = product.containsKey('product_name') ? product['product_name'] : "Unknown Product";
+          
           String nutritionDataPer = product['nutrition_data_per'] ?? "Unknown"; // "100g" or "serving"
           String servingSizeStr = product['serving_size'] ?? "Unknown";
           double? servingSizeGrams = _extractServingSize(servingSizeStr);
@@ -478,44 +522,63 @@ void printSharedPreferences() {
             Map<String, double> extractedNutrients = {};
             
             nutriments.forEach((key, value) {
-              if (value is num) {  // Ensure it's a number before adding
-                String per100gKey = "${key}_100g";
+              if (value is num){
                 String? mappedKey = apiToAppNutrientMap[key];
+                if (mappedKey == null && key.endsWith("_100g")) {
+                  String base = key.substring(0, key.length - 5);
+                  mappedKey = apiToAppNutrientMap[base];
+                }
                 if (mappedKey != null) {
-                  if (nutriments.containsKey(per100gKey) && nutriments[per100gKey] is num) {
-                    extractedNutrients[mappedKey] = nutriments[per100gKey].toDouble();
-                  }
-                  else{
-                    if (nutritionDataPer == "100g"){
-                      extractedNutrients[mappedKey] = value.toDouble();
+                  String baseKey = key.endsWith("_100g")
+                      ? key.substring(0, key.length - 5)
+                      : key;
+                  double? bestVal = _pickBestPer100gValue(baseKey, nutriments);
+                  
+                  if (bestVal != null) {
+                    // Now handle the difference if "nutritionDataPer" == "serving"
+                    double finalVal;
+                    if (nutritionDataPer == "serving"
+                        && servingSizeGrams != null
+                        && servingSizeGrams > 0) {
+                      // Convert from per serving to per 100g
+                      finalVal = (bestVal / servingSizeGrams) * 100;
+                    } else {
+                      // If "100g" or unknown, just store bestVal
+                      finalVal = bestVal;
                     }
-                    else if (nutritionDataPer == "serving" && servingSizeGrams != null && servingSizeGrams > 0){
-                      double convertedValue = (value / servingSizeGrams) * 100;
-                      if (convertedValue > 0) extractedNutrients[mappedKey] = convertedValue;
-                    }
+
+                    // Store in the extractedNutrients map
+                    extractedNutrients[mappedKey] = finalVal;
                   }
                 }
               }
             });
+
             if (extractedNutrients.isEmpty && product.containsKey('nutriments_estimated')) {
               final nutrimentsEstimated = product['nutriments_estimated'] as Map<String, dynamic>;
 
-              nutrimentsEstimated.forEach((key, value) {
+              nutrimentsEstimated.forEach((key, dynamic value) {
                 if (value is num) {  // Ensure it's a number before adding
-                  String per100gKey = "${key}_100g";
                   String? mappedKey = apiToAppNutrientMap[key];
+                  if (mappedKey == null && key.endsWith("_100g")) {
+                    String base = key.substring(0, key.length - 5);
+                    mappedKey = apiToAppNutrientMap[base];
+                  }
                   if (mappedKey != null) {
-                    if (nutrimentsEstimated.containsKey(per100gKey) && nutrimentsEstimated[per100gKey] is num) {
-                      extractedNutrients[mappedKey] = nutrimentsEstimated[per100gKey].toDouble();
-                    }
-                    else {
-                      if (nutritionDataPer == "100g") {
-                        extractedNutrients[mappedKey] = value.toDouble();
+                    String baseKey = key.endsWith("_100g")
+                        ? key.substring(0, key.length - 5)
+                        : key;
+                    double? bestVal = _pickBestPer100gValue(baseKey, nutrimentsEstimated);
+                    if (bestVal != null) {
+                      double finalVal;
+                      if (nutritionDataPer == "serving"
+                          && servingSizeGrams != null
+                          && servingSizeGrams > 0) {
+                        finalVal = (bestVal / servingSizeGrams) * 100;
+                      } else {
+                        finalVal = bestVal;
                       }
-                      else if (nutritionDataPer == "serving" && servingSizeGrams != null && servingSizeGrams > 0) {
-                        double convertedValue = (value / servingSizeGrams) * 100;
-                        if (convertedValue > 0) extractedNutrients[mappedKey] = convertedValue;
-                      }
+                      extractedNutrients[mappedKey] = finalVal;
                     }
                   }
                 }
@@ -526,7 +589,7 @@ void printSharedPreferences() {
               "productName": productName,
               "brandName": brandName,
               "nutritionalInfo": extractedNutrients,
-              "barcode": barcode
+              "barcode": barcode,
             };
             barcodeNotFound = extractedNutrients.isEmpty;
           } else {
@@ -563,6 +626,35 @@ void printSharedPreferences() {
     return null; // Return null if we can't extract a valid serving size
   }
 
+  double? _pickBestPer100gValue(String key, Map<String, dynamic> nutriments){
+    final rawVal = nutriments[key];
+    final per100gVal = nutriments["${key}_100g"];
+
+    double? rawDouble = (rawVal is num) ? rawVal.toDouble() : null;
+    double? p100gDouble = (per100gVal is num) ? per100gVal.toDouble() : null;
+
+    if (rawDouble == null && p100gDouble == null) return null;
+    if (rawDouble == null) return p100gDouble;
+    if (p100gDouble == null) return rawDouble;
+
+    bool isCalories = key.contains("energy-kcal");
+
+    double lowerBound = isCalories ? 50 : 1;   
+    double upperBound = isCalories ? 1500 : 100;
+
+    bool rawInRange = (rawDouble >= lowerBound && rawDouble <= upperBound);
+    bool p100gInRange = (p100gDouble >= lowerBound && p100gDouble <= upperBound);
+
+    if (rawInRange && !p100gInRange) {
+      return rawDouble;
+    }
+    else if (!rawInRange && p100gInRange) {
+      return p100gDouble;
+    }
+
+    return p100gDouble;
+  }
+
   Future<Map<String, dynamic>?> getFoodIntakeFromBarcode(String barcode, String unit, double amount) async {
     Map<String, dynamic>? finalData;
     bool isFavorite = selectedPet.favoriteFoods!
@@ -571,8 +663,13 @@ void printSharedPreferences() {
       await fetchBarcodeData(barcode);
     }
     else{
-      scannedFoodData = selectedPet.favoriteFoods!
-      .firstWhere((food) => food["barcode"] == barcode);
+      final foundFood = selectedPet.favoriteFoods!.firstWhere(
+        (food) => food["barcode"] == barcode,
+        orElse: () => <String, dynamic>{}, // empty map
+      );
+
+      // 2) Make a defensive copy so we don't mutate the favorite's data
+      scannedFoodData = Map<String, dynamic>.from(foundFood);
     }
 
     if (barcodeNotFound == true){
@@ -581,7 +678,7 @@ void printSharedPreferences() {
     else if (scannedFoodData.isNotEmpty){
       double conversionRate = 1;
       if (unit == "Cups"){
-        conversionRate = 340;
+        conversionRate = 108;
         if (scannedFoodData.containsKey("cupToGramConversion") 
           && scannedFoodData["cupToGramConversion"] is num 
           && scannedFoodData["cupToGramConversion"] > 0){
@@ -599,7 +696,7 @@ void printSharedPreferences() {
       else if (unit == "Grams"){
         conversionRate = 1;
       }
-
+    
       if (scannedFoodData['nutritionalInfo'] != null && scannedFoodData['nutritionalInfo'].isNotEmpty){
         Map<String, double> newNutrients = {};
 

@@ -1,3 +1,4 @@
+import 'package:camera/camera.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -19,15 +20,22 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  // Get a list of available cameras
+  final cameras = await availableCameras();
+  if (cameras.isEmpty) {
+    print('⚠️ No cameras found on this device.');
+  }
+  final firstCamera = cameras.isNotEmpty ? cameras.first : null;
 
   final appState = MyAppState();
   await appState.init();
-  runApp(MyApp(appState: appState));
+  runApp(MyApp(appState: appState, camera: firstCamera));
 }
 
 class MyApp extends StatelessWidget {
   final MyAppState appState;
-  const MyApp({super.key, required this.appState});
+  final CameraDescription? camera;
+  const MyApp({super.key, required this.appState, required this.camera});
 
   // This widget is the root of your application.
   @override
@@ -54,7 +62,7 @@ class MyApp extends StatelessWidget {
               if (appState.needsToEnterName) {
                 return const EnterNamePage();
               } else {
-                return const MyHomePage();
+                return MyHomePage(camera: camera);
               }
             } else {
               return EnterAccountPage();
@@ -67,7 +75,8 @@ class MyApp extends StatelessWidget {
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key}); 
+  final CameraDescription? camera;
+  const MyHomePage({super.key, required this.camera}); 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
@@ -90,7 +99,13 @@ class _MyHomePageState extends State<MyHomePage> {
       case 1:
         page = ProgressTrackerPage(pet: selectedPet);
       case 2:
-        page = const CameraPage();
+        if (widget.camera == null) {
+          page = const Center(
+            child: Text("No camera found on this device.", style: TextStyle(fontSize: 18)),
+          );
+        } else {
+          page = CameraPage(camera: widget.camera!);
+        }
       case 3:
         page = const FoodPage();
       case 4:
