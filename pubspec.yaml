@@ -25,6 +25,9 @@ dependencies:
   shared_preferences: ^2.5.3
   fl_chart: ^0.70.2
   intl: ^0.20.2
+  mobile_scanner: ^6.0.7
+  firebase_storage: ^12.4.5
+  uuid: ^4.5.1
 
 dev_dependencies:
   flutter_test:
@@ -34,7 +37,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets: 
-  - assets/sigmalogo.png
+  - assets/images/
   # Uncomment and add assets or fonts if needed
   # assets:
   #   - images/a_dot_burr.jpeg

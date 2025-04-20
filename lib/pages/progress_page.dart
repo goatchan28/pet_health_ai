@@ -65,9 +65,9 @@ class _ProgressTrackerPageState extends State<ProgressTrackerPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  ProgressPictureCard(date: '03-20-25', imageUrl: "assets/sigmalogo.png"),
-                  ProgressPictureCard(date: '03-20-25', imageUrl: "assets/sigmalogo.png"),
-                  ProgressPictureCard(date: '03-20-25', imageUrl: "assets/sigmalogo.png")
+                  ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png"),
+                  ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png"),
+                  ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png")
                 ],
               ),
             ),

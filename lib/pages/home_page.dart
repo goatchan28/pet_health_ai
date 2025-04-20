@@ -42,7 +42,7 @@ class _HomePageState extends State<HomePage> {
           GestureDetector(
             onTap: () => _showPetSelectionDialog(context, appState),
             child: CircleAvatar(
-              backgroundImage: AssetImage("assets/sigmalogo.png"),
+              backgroundImage: AssetImage("assets/images/sigmalogo.png"),
               radius: 20,
             ),
           ),
@@ -237,9 +237,9 @@ class _HomePageState extends State<HomePage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ProgressPictureCard(date: '03-20-25', imageUrl: "assets/sigmalogo.png"),
-                ProgressPictureCard(date: '03-20-25', imageUrl: "assets/sigmalogo.png"),
-                ProgressPictureCard(date: '03-20-25', imageUrl: "assets/sigmalogo.png")
+                ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png"),
+                ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png"),
+                ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png")
               ],
             ),
           ),
@@ -261,7 +261,7 @@ class _HomePageState extends State<HomePage> {
               Pet pet = entry.value;
               return ListTile(
                 leading: CircleAvatar(
-                  backgroundImage: AssetImage("assets/sigmalogo.png"),
+                  backgroundImage: AssetImage("assets/images/sigmalogo.png"),
                 ),
                 title: Text(pet.name),
                 onTap: () {
@@ -356,7 +356,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-void showFeedDialog(BuildContext context, Pet pet, {String? selectedProductName}) {
+Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProductName, String? selectedProductBarcode}) {
   var appState = context.read<MyAppState>();
   TextEditingController barcodeController = TextEditingController();
   List<String> unitOptions = ["Grams", "Cups", "Ounces"];
@@ -367,6 +367,7 @@ void showFeedDialog(BuildContext context, Pet pet, {String? selectedProductName}
   int mode = 0;
   Map<String, dynamic>? foodData;
   List favoriteProductNames = pet.favoriteFoods!.map((food) => food["productName"] ?? "Unknown Product").toList();
+  favoriteProductNames.add("None");
   manualControllers["Calories"] = TextEditingController(text: "0");
 
   pet.nutritionalRequirements.forEach((key, value) {
@@ -380,8 +381,11 @@ void showFeedDialog(BuildContext context, Pet pet, {String? selectedProductName}
     );
     barcodeController.text = selectedFood["barcode"] ?? "";
   }
+  else if (selectedProductBarcode != null){
+    barcodeController.text = selectedProductBarcode;
+  }
 
-  showDialog(
+  return showDialog(
     context: context,
     builder: (context) {
       return StatefulBuilder(
@@ -478,22 +482,6 @@ void showFeedDialog(BuildContext context, Pet pet, {String? selectedProductName}
                             controller: amountController,
                             keyboardType: TextInputType.number,
                             decoration: InputDecoration(labelText: "Enter Amount"),
-                            onSubmitted: (amount) async {
-                              if (unitChosen == null || barcodeController.text.isEmpty) {
-                                print("❌ Error: Unit or barcode missing");
-                                return;
-                              }
-                              double? parsedAmount = double.tryParse(amountController.text);
-                              if (parsedAmount == null || parsedAmount <= 0) {
-                                print("❌ Error: Invalid amount entered");
-                                return;
-                              }
-                              String? barcode = barcodeController.text;
-                              appState.barcodeNotFound = false;
-                              foodData = await appState.getFoodIntakeFromBarcode(barcode, unitChosen!, parsedAmount);
-                              print("barcodeNotFound status: ${appState.barcodeNotFound}");
-                              setState(() {});
-                            },
                           ),
                         ),
                         Padding(
@@ -502,21 +490,6 @@ void showFeedDialog(BuildContext context, Pet pet, {String? selectedProductName}
                             controller: barcodeController,
                             keyboardType: TextInputType.text,
                             decoration: InputDecoration(labelText: "Enter Barcode"),
-                            onSubmitted: (barcode) async {
-                              if (unitChosen == null || amountController.text.isEmpty) {
-                                print("❌ Error: Unit or amount missing");
-                                return;
-                              }
-                              double? amount = double.tryParse(amountController.text);
-                              if (amount == null || amount <= 0) {
-                                print("❌ Error: Invalid amount entered");
-                                return;
-                              }
-                              appState.barcodeNotFound = false;
-                              foodData = await appState.getFoodIntakeFromBarcode(barcode, unitChosen!, amount);
-                              print("barcodeNotFound status: ${appState.barcodeNotFound}");
-                              setState(() {});
-                            },
                           ),
                         ),
                         if (foodData == null && appState.barcodeNotFound)...[
@@ -541,6 +514,39 @@ void showFeedDialog(BuildContext context, Pet pet, {String? selectedProductName}
                                     Text("Brand: ${foodData!['brandName']}"),
                                     for (var entry in foodData!['nutritionalInfo'].entries)
                                       Text("${entry.key}: ${entry.value}g"),
+                                    ElevatedButton(
+                                      onPressed: () {
+                                        if ((mode == 0) && foodData != null) {
+                                          appState.updatePetIntake(pet, foodData!['nutritionalInfo'], foodData!['barcode'], "${foodData!['amount']} $unitChosen");
+                                          appState.barcodeNotFound = false;
+                                          setState(() {}); // Refresh UI
+                                          Navigator.pop(context);
+                                        } 
+                                        else if (mode == 2) {
+                                          Map<String, double> updatedValues = {};
+                                          manualControllers.forEach((key, controller) {
+                                            double? value = double.tryParse(controller.text);
+                                            if (value != null) {
+                                              updatedValues[key] = value;
+                                            }
+                                          });
+                                          double? amount = double.tryParse(amountController.text);
+                                          if (amount == null || amount <= 0) {
+                                            print("❌ Error: Invalid amount entered");
+                                            return;
+                                          }
+                                          else if (unitChosen == null){
+                                            print("❌ Error: No unit chosen");
+                                            return;
+                                          }
+                                          appState.updatePetIntake(pet, updatedValues, "No Barcode", "$amount $unitChosen");
+                                          appState.barcodeNotFound = false;
+                                          setState(() {}); // Refresh UI
+                                          Navigator.pop(context);
+                                        }
+                                      },
+                                      child: Text("Add Food"),
+                                    ),
                                   ],
                                 ),
                               ],
@@ -625,37 +631,28 @@ void showFeedDialog(BuildContext context, Pet pet, {String? selectedProductName}
                 child: Text("Cancel"),
               ),
               ElevatedButton(
-                onPressed: () {
-                  if ((mode == 0) && foodData != null) {
-                    appState.updatePetIntake(pet, foodData!['nutritionalInfo'], foodData!['barcode'], "${foodData!['amount']} $unitChosen");
-                    appState.barcodeNotFound = false;
-                    setState(() {}); // Refresh UI
-                    Navigator.pop(context);
-                  } 
-                  else if (mode == 2) {
-                    Map<String, double> updatedValues = {};
-                    manualControllers.forEach((key, controller) {
-                      double? value = double.tryParse(controller.text);
-                      if (value != null) {
-                        updatedValues[key] = value;
-                      }
-                    });
-                    double? amount = double.tryParse(amountController.text);
-                    if (amount == null || amount <= 0) {
-                      print("❌ Error: Invalid amount entered");
-                      return;
-                    }
-                    else if (unitChosen == null){
-                      print("❌ Error: No unit chosen");
-                      return;
-                    }
-                    appState.updatePetIntake(pet, updatedValues, "No Barcode", "$amount $unitChosen");
-                    appState.barcodeNotFound = false;
-                    setState(() {}); // Refresh UI
-                    Navigator.pop(context);
+                onPressed: () async {
+                  FocusScope.of(context).unfocus();
+                  String? barcode = barcodeController.text;
+                  double? amount = double.tryParse(amountController.text);
+                  if (unitChosen == null || amountController.text.isEmpty) {
+                    print("❌ Error: Unit or amount missing");
+                    return;
                   }
+                  if (amount == null || amount <= 0) {
+                    print("❌ Error: Invalid amount entered");
+                    return;
+                  }
+                  if (unitChosen == null || barcode.isEmpty) {
+                    print("❌ Error: Unit or barcode missing");
+                    return;
+                  }
+                  appState.barcodeNotFound = false;
+                  foodData = await appState.getFoodIntakeFromBarcode(barcode, unitChosen!, amount);
+                  print("barcodeNotFound status: ${appState.barcodeNotFound}");
+                  setState(() {});
                 },
-                child: Text("Add Food"),
+                child: Text("Submit"),
               ),
             ],
           );

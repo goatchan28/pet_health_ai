@@ -716,11 +716,11 @@ void printSharedPreferences() {
       && scannedFoodData["guaranteedAnalysis"] !=null
       && scannedFoodData["guaranteedAnalysis"].isNotEmpty){
         Map<String, double> newNutrients = {};
-        if (scannedFoodData.containsKey("moistureContent") 
-        && scannedFoodData["moistureContent"] is num 
-        && scannedFoodData["moistureContent"] >= 0 
-        && scannedFoodData["moistureContent"] <= 100){
-          double moistureContent = scannedFoodData["moistureContent"];  // Get moisture content
+        double moistureContent = 0;
+        if (scannedFoodData['guaranteedAnalysis'].containsKey('Moisture') &&
+        scannedFoodData['guaranteedAnalysis']['Moisture'] is num){
+          final m = scannedFoodData['guaranteedAnalysis']['Moisture'] as num;
+          if (m >= 0 && m <= 100)  moistureContent = m.toDouble();
           double dryMatterPercent = 100 - moistureContent;  // Dry matter is the complement of moisture content
           
           // Adjust the nutrient percentages based on the dry matter percentage
@@ -733,6 +733,12 @@ void printSharedPreferences() {
           scannedFoodData['guaranteedAnalysis'].forEach((key, value) {
             newNutrients[key] = (value * amount * conversionRate) / 100;  // Scale nutrients based on amount
           });
+        }
+        if (scannedFoodData.containsKey('kcalPer100g') 
+        && scannedFoodData['kcalPer100g'] is num) {
+          final kcalPer100g = (scannedFoodData['kcalPer100g'] as num).toDouble();
+          newNutrients['Calories'] =
+              (kcalPer100g * amount * conversionRate) / 100;
         }
         finalData = {
           "productName": scannedFoodData["productName"],

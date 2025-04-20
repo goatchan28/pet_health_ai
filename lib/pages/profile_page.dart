@@ -38,7 +38,7 @@ class ProfilePage extends StatelessWidget {
               SizedBox(height: 20),
               Row(
                 children: [
-                  Image.asset("assets/sigmalogo.png", width: 75, height: 75,fit: BoxFit.contain),
+                  Image.asset("assets/images/sigmalogo.png", width: 75, height: 75,fit: BoxFit.contain),
                   SizedBox(width: 8),
                   Text(
                     'Your Pets',

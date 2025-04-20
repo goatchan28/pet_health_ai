@@ -121,7 +121,7 @@ class _MyHomePageState extends State<MyHomePage> {
       bottomNavigationBar: NavigationBar(
         destinations: [
           NavigationDestination(
-            icon: Image.asset("assets/sigmalogo.png", width: 88, height: 88, fit: BoxFit.cover,), 
+            icon: Image.asset("assets/images/sigmalogo.png", width: 88, height: 88, fit: BoxFit.cover,), 
             label: '',
           ),
           NavigationDestination(
