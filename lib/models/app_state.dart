@@ -734,9 +734,9 @@ void printSharedPreferences() {
             newNutrients[key] = (value * amount * conversionRate) / 100;  // Scale nutrients based on amount
           });
         }
-        if (scannedFoodData.containsKey('kcalPer100g') 
-        && scannedFoodData['kcalPer100g'] is num) {
-          final kcalPer100g = (scannedFoodData['kcalPer100g'] as num).toDouble();
+        if (scannedFoodData.containsKey('caloriesPer100g') 
+        && scannedFoodData['caloriesPer100g'] is num) {
+          final kcalPer100g = (scannedFoodData['caloriesPer100g'] as num).toDouble();
           newNutrients['Calories'] =
               (kcalPer100g * amount * conversionRate) / 100;
         }

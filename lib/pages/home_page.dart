@@ -987,6 +987,11 @@ Future<void> showProductDialog(BuildContext context, String barcode, String amou
   final productName = scannedFoodData["productName"] ?? "Unknown Product";
   final brandName = scannedFoodData["brandName"] ?? "Unknown Brand";
   final nutritionalInfo = scannedFoodData["nutritionalInfo"] as Map<String, double>? ?? {};
+  final Map<String, double> guaranteedAnalysis =
+      ((scannedFoodData['guaranteedAnalysis'] as Map<String, dynamic>?) ?? {})
+          .map((k, v) => MapEntry(k, (v as num?)?.toDouble() ?? 0.0));
+
+
 
   bool isFavorite = appState.selectedPet.favoriteFoods!
       .any((food) => food["barcode"] == barcode);
@@ -1043,13 +1048,19 @@ Future<void> showProductDialog(BuildContext context, String barcode, String amou
                   SizedBox(height: 8), // Add some space before nutritional info
                   Text("Amount: $amount", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   SizedBox(height: 8),
-                  Text("Nutritional Information (per 100g):", style: TextStyle(fontWeight: FontWeight.bold)),
-                  if (nutritionalInfo.isNotEmpty)
-                    ...nutritionalInfo.entries.map((entry) {
-                      return Text("${entry.key}: ${entry.value.toStringAsFixed(2)}g");
-                    })
-                  else
-                    Text("No nutritional information available."),
+                  if (nutritionalInfo.isNotEmpty) ...[
+                    Text("Nutritional Information (per 100g):", style: TextStyle(fontWeight: FontWeight.bold)),
+                    ...nutritionalInfo.entries.map(
+                      (e) => Text("${e.key}: ${e.value.toStringAsFixed(2)} g"),
+                    ),
+                  ] else if (guaranteedAnalysis.isNotEmpty) ...[
+                    Text("Guaranteed Analysis:", style: TextStyle(fontWeight: FontWeight.bold)),
+                    ...guaranteedAnalysis.entries.map(
+                      (e) => Text("${e.key}: ${e.value.toStringAsFixed(2)} %"),
+                    ),
+                  ] else ...[
+                    const Text("No nutritional information available."),
+                  ],
                 ],
               ),
             ),
