@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:intl/intl.dart';
 import 'pet.dart';
 import 'dart:convert';
 import "package:shared_preferences/shared_preferences.dart";
@@ -112,73 +111,73 @@ class MyAppState extends ChangeNotifier {
   };
 
 
-  Future<void> scheduleDailyReset() async{
-    final now = DateTime.now();
-    final todayUtc = "${now.year}-${now.month}-${now.day}";
+  // Future<void> scheduleDailyReset() async{
+  //   final now = DateTime.now();
+  //   final todayUtc = "${now.year}-${now.month}-${now.day}";
 
-    try {
-      // 🔥 Get last reset date from Firestore (System-wide)
-      final resetDoc = await FirebaseFirestore.instance
-          .collection("system")
-          .doc("dailyReset")
-          .get();
+  //   try {
+  //     // 🔥 Get last reset date from Firestore (System-wide)
+  //     final resetDoc = await FirebaseFirestore.instance
+  //         .collection("system")
+  //         .doc("dailyReset")
+  //         .get();
 
-      final lastResetDate = resetDoc.exists ? resetDoc["lastResetDate"] : null;
+  //     final lastResetDate = resetDoc.exists ? resetDoc["lastResetDate"] : null;
 
-      if (lastResetDate == todayUtc) {
-        print("✅ Already reset today. Skipping reset.");
-        return; // Prevent multiple resets in one day
-      }
+  //     if (lastResetDate == todayUtc) {
+  //       print("✅ Already reset today. Skipping reset.");
+  //       return; // Prevent multiple resets in one day
+  //     }
 
-      print("🌙 Running daily reset...");
-      await saveDailyNutrients();
-      await resetAllPets(); // Reset for all users
+  //     print("🌙 Running daily reset...");
+  //     await saveDailyNutrients();
+  //     await resetAllPets(); // Reset for all users
 
-      // 🔥 Save today's date (UTC) in Firestore
-      await FirebaseFirestore.instance
-          .collection("system")
-          .doc("dailyReset")
-          .set({"lastResetDate": todayUtc});
+  //     // 🔥 Save today's date (UTC) in Firestore
+  //     await FirebaseFirestore.instance
+  //         .collection("system")
+  //         .doc("dailyReset")
+  //         .set({"lastResetDate": todayUtc});
 
-      print("✅ Daily reset completed.");
-    } catch (e) {
-      print("❌ Error in daily reset: $e");
-    }
-  }
+  //     print("✅ Daily reset completed.");
+  //   } catch (e) {
+  //     print("❌ Error in daily reset: $e");
+  //   }
+  // }
   
-  Future<void> resetAllPets() async {
-    try {
-      print("🌙 Resetting all pets' intake...");
+  // Future<void> resetAllPets() async {
+  //   try {
+  //     print("🌙 Resetting all pets' intake...");
     
-      // 🔥 Fetch ALL pets from Firestore
-      final petCollection = FirebaseFirestore.instance.collection("pets");
-      final querySnapshot = await petCollection.get();
+  //     // 🔥 Fetch ALL pets from Firestore
+  //     final petCollection = FirebaseFirestore.instance.collection("pets");
+  //     final querySnapshot = await petCollection.get();
 
-      // Loop through all pets and reset their intake
-      for (var doc in querySnapshot.docs) {
-        await doc.reference.update({
-          "calorieIntake": 0,
-          "nutritionalIntake": Pet.initializeIntake(),
-          "mealLog":[],
-          "exerciseLog":[] // Reset all nutrients to zero
-        });
-      }
+  //     // Loop through all pets and reset their intake
+  //     for (var doc in querySnapshot.docs) {
+  //       await doc.reference.update({
+  //         "calorieIntake": 0,
+  //         "nutritionalIntake": Pet.initializeIntake(),
+  //         "mealLog":[],
+  //         "exerciseLog":[] // Reset all nutrients to zero
+  //       });
+  //     }
 
-      if (pets.isNotEmpty) {
-        for (Pet pet in pets) {
-          pet.calorieIntake = 0;
-          pet.nutritionalIntake = Pet.initializeIntake();
-          pet.mealLog = [];
-          pet.exerciseLog = [];
-        }
-        await updateLocalPetData();
-      }
+  //     if (pets.isNotEmpty) {
+  //       for (Pet pet in pets) {
+  //         pet.calorieIntake = 0;
+  //         pet.nutritionalIntake = Pet.initializeIntake();
+  //         pet.mealLog = [];
+  //         pet.exerciseLog = [];
+  //       }
+  //       await updateLocalPetData();
+  //     }
 
-      print("✅ All pets' intake reset successfully!");
-    } catch (e) {
-      print("❌ Error resetting pets: $e");
-    }
-  }
+  //     print("✅ All pets' intake reset successfully!");
+  //   } catch (e) {
+  //     print("❌ Error resetting pets: $e");
+  //   }
+  // }
 
   Future<void> init() async {
     prefs = await SharedPreferencesWithCache.create(
@@ -187,8 +186,63 @@ class MyAppState extends ChangeNotifier {
       )
     );
     await loadData();
-    await scheduleDailyReset();
+    await syncWithBackend();
   }
+
+  Future<void> _applyLocalReset() async {
+    for (final pet in pets) {
+      pet.calorieIntake = 0;
+      pet.nutritionalIntake = Pet.initializeIntake();
+      pet.mealLog = [];
+      pet.exerciseLog = [];
+    }
+    await updateLocalPetData();   // rewrites SharedPreferences
+    notifyListeners();
+  }
+
+  Future<void> _refreshPetsFromServer() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final snap = await FirebaseFirestore.instance
+        .collection('pets')
+        .where('ownerUID', arrayContains: uid)
+        .get();
+
+    if (snap.docs.isEmpty) {
+      print("⚠️ No pets from server – keeping cached list");
+      return;
+    }
+
+    pets = snap.docs.map((d) => Pet.fromJson(d.data())).toList();
+    await updateLocalPetData();
+    notifyListeners();
+  }
+
+
+  /// Compare lastResetDate in Firestore vs. SharedPrefs.
+  /// If different → refresh pets & zero today’s counters.
+  Future<void> syncWithBackend() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final snap = await FirebaseFirestore.instance
+        .doc('system/dailyReset')
+        .get();
+
+    final serverDate = snap.data()?['lastResetDate'] as String?;
+    final localDate  = prefs.getString('lastResetDate');
+
+    // ➜ Add this line
+    if (serverDate == null) return;        // nothing to sync yet
+
+    if (serverDate != localDate) {
+      await _refreshPetsFromServer();
+      await _applyLocalReset();
+      await prefs.setString('lastResetDate', serverDate);
+    }
+  }
+
+
 
   Future<void> loadData() async {
     if (hasLoadedData) return;
@@ -218,7 +272,8 @@ class MyAppState extends ChangeNotifier {
     }
   }
 
-  Pet get selectedPet => pets[petIndex];
+  Pet get selectedPet => (petIndex >= 0 && petIndex < pets.length) ? pets[petIndex] : defaultPet;
+
 
   Future<void> setName(String newName) async {
     name = newName;
@@ -243,72 +298,72 @@ class MyAppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> saveDailyNutrients() async {
-    try {
-      final now = DateTime.now();
-      final yesterday = now.subtract(Duration(days:1));
-      final dayOfWeek = DateFormat('EEEE').format(yesterday);
+  // Future<void> saveDailyNutrients() async {
+  //   try {
+  //     final now = DateTime.now();
+  //     final yesterday = now.subtract(Duration(days:1));
+  //     final dayOfWeek = DateFormat('EEEE').format(yesterday);
 
-      print("📅 Saving daily nutrients for $dayOfWeek (yesterday)...");
+  //     print("📅 Saving daily nutrients for $dayOfWeek (yesterday)...");
 
-      final petCollection = FirebaseFirestore.instance.collection("pets");
-      final querySnapshot = await petCollection.get();
+  //     final petCollection = FirebaseFirestore.instance.collection("pets");
+  //     final querySnapshot = await petCollection.get();
 
-      if (dayOfWeek == "Saturday"){
-         for (var doc in querySnapshot.docs){
-            final petDocRef = doc.reference;
-            await petDocRef.set(
-              {"weeklyNutrients": Pet.initializeWeeklyNutrients()}, SetOptions(merge:true)
-            );
-         }
-         if (pets.isNotEmpty) {
-          for (Pet pet in pets) {
-            pet.weeklyNutrients = Pet.initializeWeeklyNutrients();
-          } 
-          await updateLocalPetData();
-        }
-        print("It is Saturday! Reset weekly nutrients!");
+  //     if (dayOfWeek == "Saturday"){
+  //        for (var doc in querySnapshot.docs){
+  //           final petDocRef = doc.reference;
+  //           await petDocRef.set(
+  //             {"weeklyNutrients": Pet.initializeWeeklyNutrients()}, SetOptions(merge:true)
+  //           );
+  //        }
+  //        if (pets.isNotEmpty) {
+  //         for (Pet pet in pets) {
+  //           pet.weeklyNutrients = Pet.initializeWeeklyNutrients();
+  //         } 
+  //         await updateLocalPetData();
+  //       }
+  //       print("It is Saturday! Reset weekly nutrients!");
   
-        return;
-      }
+  //       return;
+  //     }
 
-      for (var doc in querySnapshot.docs){
-        final petDocRef = doc.reference;
-        final petData = doc.data();
+  //     for (var doc in querySnapshot.docs){
+  //       final petDocRef = doc.reference;
+  //       final petData = doc.data();
 
-        final intakeData = petData['nutritionalIntake'] as Map<String, dynamic>;
+  //       final intakeData = petData['nutritionalIntake'] as Map<String, dynamic>;
 
-        final double carbohydrates = (intakeData["Carbohydrates"] ?? 0).toDouble();
-        final double protein = (intakeData["Crude Protein"] ?? 0).toDouble();
-        final double fat = (intakeData["Crude Fat"] ?? 0).toDouble();
-        final double calorieIntake = petData["calorieIntake"].toDouble() ?? 0;
+  //       final double carbohydrates = (intakeData["Carbohydrates"] ?? 0).toDouble();
+  //       final double protein = (intakeData["Crude Protein"] ?? 0).toDouble();
+  //       final double fat = (intakeData["Crude Fat"] ?? 0).toDouble();
+  //       final double calorieIntake = petData["calorieIntake"].toDouble() ?? 0;
 
-        // Save daily intake
-        await petDocRef.update({
-          "weeklyNutrients.$dayOfWeek.Carbohydrates": carbohydrates,
-          "weeklyNutrients.$dayOfWeek.Crude Protein": protein,
-          "weeklyNutrients.$dayOfWeek.Crude Fat": fat,
-          "weeklyNutrients.$dayOfWeek.Calories": calorieIntake,
-        });
+  //       // Save daily intake
+  //       await petDocRef.update({
+  //         "weeklyNutrients.$dayOfWeek.Carbohydrates": carbohydrates,
+  //         "weeklyNutrients.$dayOfWeek.Crude Protein": protein,
+  //         "weeklyNutrients.$dayOfWeek.Crude Fat": fat,
+  //         "weeklyNutrients.$dayOfWeek.Calories": calorieIntake,
+  //       });
 
-        print("✅ Daily nutrients saved for pet ${doc.id} on $dayOfWeek!");
-      }
+  //       print("✅ Daily nutrients saved for pet ${doc.id} on $dayOfWeek!");
+  //     }
 
-      if (pets.isNotEmpty) {
-        for (Pet pet in pets) {
-          pet.weeklyNutrients![dayOfWeek]!["Carbohydrates"] = (pet.nutritionalIntake["Carbohydrates"] ?? 0).toDouble();
-          pet.weeklyNutrients![dayOfWeek]!["Crude Protein"] = (pet.nutritionalIntake["Crude Protein"] ?? 0).toDouble();
-          pet.weeklyNutrients![dayOfWeek]!["Crude Fat"] = (pet.nutritionalIntake["Crude Fat"] ?? 0).toDouble();
-          pet.weeklyNutrients![dayOfWeek]!["Calories"] = (pet.calorieIntake).toDouble();
-        } 
-      }
-      await updateLocalPetData();
-      print("🎯 All pets' daily nutrients saved successfully!");
-    }
-    catch(e){
-      print("❌ Error saving daily nutrients: $e");
-    }
-  }
+  //     if (pets.isNotEmpty) {
+  //       for (Pet pet in pets) {
+  //         pet.weeklyNutrients![dayOfWeek]!["Carbohydrates"] = (pet.nutritionalIntake["Carbohydrates"] ?? 0).toDouble();
+  //         pet.weeklyNutrients![dayOfWeek]!["Crude Protein"] = (pet.nutritionalIntake["Crude Protein"] ?? 0).toDouble();
+  //         pet.weeklyNutrients![dayOfWeek]!["Crude Fat"] = (pet.nutritionalIntake["Crude Fat"] ?? 0).toDouble();
+  //         pet.weeklyNutrients![dayOfWeek]!["Calories"] = (pet.calorieIntake).toDouble();
+  //       } 
+  //     }
+  //     await updateLocalPetData();
+  //     print("🎯 All pets' daily nutrients saved successfully!");
+  //   }
+  //   catch(e){
+  //     print("❌ Error saving daily nutrients: $e");
+  //   }
+  // }
 
   Future<void> addPetManually({
     required String name,

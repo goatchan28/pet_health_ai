@@ -2,8 +2,10 @@
 
 import * as logger from "firebase-functions/logger";
 import {onDocumentCreated} from "firebase-functions/v2/firestore";
+import {onSchedule} from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 import {VertexAI} from "@google-cloud/vertexai";
+import {DateTime} from "luxon";
 
 // Start writing functions
 // https://firebase.google.com/docs/functions/typescript
@@ -151,5 +153,73 @@ export const scanCreated = onDocumentCreated(
         message: (err as Error).message ?? "Gemini failure",
       });
     }
+  }
+);
+
+
+const blankDay = {
+  "Calories": 0,
+  "Carbohydrates": 0,
+  "Crude Fat": 0,
+  "Crude Protein": 0,
+} as const;
+
+const initializeWeeklyNutrients = () => ({
+  Monday: {...blankDay},
+  Tuesday: {...blankDay},
+  Wednesday: {...blankDay},
+  Thursday: {...blankDay},
+  Friday: {...blankDay},
+  Saturday: {...blankDay},
+  Sunday: {...blankDay},
+});
+
+
+export const dailyReset = onSchedule(
+  {schedule: "0 0 * * *", timeZone: "America/New_York"},
+  async () => {
+    const nowNY = DateTime.now().setZone("America/New_York");
+    const yestNY = nowNY.minus({days: 1});
+    const dayName = yestNY.toFormat("EEEE"); // Monday … Sunday
+    const today = nowNY.toISODate(); // "2025-04-27"
+
+    const sysRef = admin.firestore().doc("system/dailyReset");
+    if ((await sysRef.get()).data()?.lastResetDate === today) {
+      logger.log("dailyReset: already ran today, skipping.");
+      return;
+    }
+
+    logger.log(`dailyReset: archiving ${dayName}, zeroing counters…`);
+    const petsSnap = await admin.firestore().collection("pets").get();
+    const bw = admin.firestore().bulkWriter();
+
+    petsSnap.forEach((d) => {
+      const p = d.data();
+      const intake = p.nutritionalIntake ?? {};
+
+      // ----- 1. archive yesterday’s totals -----
+      const wp = (n: string) => `weeklyNutrients.${dayName}.${n}`;
+      if (dayName === "Saturday") {
+        bw.update(d.ref, {weeklyNutrients: initializeWeeklyNutrients()});
+      }
+      bw.update(d.ref, {
+        [wp("Carbohydrates")]: Number(intake["Carbohydrates"] ?? 0),
+        [wp("Crude Protein")]: Number(intake["Crude Protein"] ?? 0),
+        [wp("Crude Fat")]: Number(intake["Crude Fat"] ?? 0),
+        [wp("Calories")]: Number(p.calorieIntake ?? 0),
+      });
+
+      // ----- 2. zero today’s counters -----
+      bw.update(d.ref, {
+        calorieIntake: 0,
+        nutritionalIntake: {}, // same empty map client uses
+        mealLog: [],
+        exerciseLog: [],
+      });
+    });
+
+    await bw.close();
+    await sysRef.set({lastResetDate: today});
+    logger.log(`dailyReset: processed ${petsSnap.size} pets`);
   }
 );
