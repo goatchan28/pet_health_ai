@@ -739,7 +739,7 @@ class _ReviewFormState extends State<_ReviewForm> {
               TextField(
                 controller: _gaCtrls![k],
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(suffixText: 'g'),
+                decoration: const InputDecoration(suffixText: '%'),
               ),
               const SizedBox(height: 12),
             ],

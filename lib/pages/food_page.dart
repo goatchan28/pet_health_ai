@@ -1,9 +1,9 @@
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:pet_health_ai/models/app_state.dart';
-import 'package:pet_health_ai/models/pet.dart';
 import 'package:pet_health_ai/pages/home_page.dart';
 import 'package:provider/provider.dart';
-
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 class FoodPage extends StatelessWidget {
   const FoodPage({super.key});
@@ -60,7 +60,7 @@ class FavoritesFoodView extends StatelessWidget {
     }
   }
 
-class FavoriteItem extends StatelessWidget {
+class FavoriteItem extends StatefulWidget {
   final Map<String, dynamic> food;
   final MyAppState appState;
 
@@ -69,20 +69,72 @@ class FavoriteItem extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    String productName = food["productName"] ?? "Unknown Product";
-    String brandName = food["brandName"] ?? "Unknown Brand";
-    String barcode = food["barcode"] ?? "N/A";
-    String imageUrl = food["imageUrl"] ?? ""; // If you plan to store images\
+  State<FavoriteItem> createState() => _FavoriteItemState();
+}
 
+class _FavoriteItemState extends State<FavoriteItem> {
+  bool _hasConnection = false;
+  String? _resolvedImageUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkConnectivity();
+    _tryResolveFrontImage();
+  }
+
+  Future<void> _checkConnectivity() async {
+    final conn = await Connectivity().checkConnectivity();
+    if (mounted) {
+      setState(() {
+        _hasConnection = conn != ConnectivityResult.none;
+      });
+    }
+  }
+
+  Future<void> _tryResolveFrontImage() async {
+    final frontImage = widget.food["frontImage"];
+    if (frontImage is String) {
+      if (frontImage.startsWith("http")) {
+        _resolvedImageUrl = frontImage;
+      } else {
+        try {
+          final url = await FirebaseStorage.instance.ref(frontImage).getDownloadURL();
+          _resolvedImageUrl = url;
+        } catch (e) {
+          print("⚠️ Fallback image resolution failed: $e");
+        }
+      }
+      if (mounted) {
+        setState(() {});
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    String productName = widget.food["productName"] ?? "Unknown Product";
+    String brandName = widget.food["brandName"] ?? "Unknown Brand";
+    String barcode = widget.food["barcode"] ?? "N/A";
+
+    final bool hasImage = _hasConnection && _resolvedImageUrl != null;
+    
     return GestureDetector(
-      onTap: (){showFeedDialog(context, appState.selectedPet, selectedProductName: productName);},
+      onTap: (){
+        showFeedDialog(context, widget.appState.selectedPet, selectedProductName: productName);
+      },
       child: Card(
         margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
         child: ListTile(
-          leading: imageUrl.isNotEmpty
-              ? Image.network(imageUrl, width: 55, height: 105, fit: BoxFit.cover)
-              : const Icon(Icons.rice_bowl, size: 55, color: Colors.grey), // Placeholder image,
+          leading: hasImage
+            ? Image.network(
+              _resolvedImageUrl!,
+              width: 55,
+              height: 55, 
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const Icon(Icons.rice_bowl, size: 55, color: Colors.grey),
+            )
+          : const Icon(Icons.rice_bowl, size: 55, color: Colors.grey),
           isThreeLine: true,
           dense: true,
           title: Text(productName, style: TextStyle(fontWeight: FontWeight.bold)),
@@ -98,7 +150,7 @@ class FavoriteItem extends StatelessWidget {
           trailing: IconButton(
             icon: Icon(Icons.star, color: Colors.amber),
             onPressed: () async {
-              await appState.selectedPet.changeFavorites(barcode, appState);
+              await widget.appState.selectedPet.changeFavorites(barcode, widget.appState);
             },
           ),
         )
@@ -107,17 +159,19 @@ class FavoriteItem extends StatelessWidget {
   }
 }
 
-void addFavoritesDialog(BuildContext context, Pet pet){
-
-}
-
 class RecommendedFoodView extends StatelessWidget {
   const RecommendedFoodView({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: const Center(child: Text("Recommended Foods Section in Progress"))
+      body: const Center(
+        child: Text(
+          "Recommended Foods Section in Progress", 
+          style: TextStyle(fontSize: 30),
+          textAlign: TextAlign.center,
+        )
+      )
     );
   }
 }

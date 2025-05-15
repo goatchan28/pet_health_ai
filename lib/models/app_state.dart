@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'pet.dart';
@@ -19,6 +21,8 @@ class MyAppState extends ChangeNotifier {
   late SharedPreferencesWithCache prefs;
   bool hasLoadedData = false;
   List<Pet> pets = [];
+  String? profileImageUrl;
+  String? memberSince;
   
   MyAppState() {
     pets = [defaultPet];
@@ -182,7 +186,7 @@ class MyAppState extends ChangeNotifier {
   Future<void> init() async {
     prefs = await SharedPreferencesWithCache.create(
       cacheOptions: const SharedPreferencesWithCacheOptions(
-        allowList: <String>{"name", "pets", "lastResetDate"}
+        allowList: <String>{"name", "pets", "lastResetDate", "profileImageUrl", "memberSince"}
       )
     );
     await loadData();
@@ -248,6 +252,10 @@ class MyAppState extends ChangeNotifier {
     if (hasLoadedData) return;
     hasLoadedData = true;
     String? savedName = prefs.getString("name") ?? "Guest";
+
+    profileImageUrl = prefs.getString("profileImageUrl");
+
+    memberSince = prefs.getString("memberSince");
 
     name = savedName;
     notifyListeners();
@@ -371,32 +379,43 @@ class MyAppState extends ChangeNotifier {
     required double weight,
     required double age,
     required bool neuteredSpayed,
+    File? imageFile,
   }) async {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid != null) {
-        // 🔥 Directly push user-entered info to Firestore
-        final docRef = await FirebaseFirestore.instance.collection('pets').add({
-          'name': name,
-          'breed': breed,
-          'weight': weight,
-          'age': age,
-          'neuteredSpayed': neuteredSpayed,
-          'ownerUID': [uid], 
-          'calorieIntake':0,
-          'nutritionalIntake':Pet.initializeIntake(),
-          'weeklyNutrients':Pet.initializeWeeklyNutrients(),
-          'vetStatistics': [],
-          'exerciseLog': [],
-          'mealLog':[],
-          'favoriteFoods':[]
-        });
-
-        print("Pet added to Firestore with ID: ${docRef.id}");
-      } else {
+      if (uid == null) {
         print("User is not logged in!");
+        return;
       }
-      await getPets(true);
+
+      String? imageUrl;
+      if (imageFile != null) {
+        final ref = FirebaseStorage.instance
+            .ref()
+            .child("pets/${uid}_${DateTime.now().millisecondsSinceEpoch}.jpg");
+        await ref.putFile(imageFile);
+        imageUrl = await ref.getDownloadURL();
+      }
+      // 🔥 Directly push user-entered info to Firestore
+      final docRef = await FirebaseFirestore.instance.collection('pets').add({
+        'name': name,
+        'breed': breed,
+        'weight': weight,
+        'age': age,
+        'neuteredSpayed': neuteredSpayed,
+        'imageUrl': imageUrl,
+        'ownerUID': [uid], 
+        'calorieIntake':0,
+        'nutritionalIntake':Pet.initializeIntake(),
+        'weeklyNutrients':Pet.initializeWeeklyNutrients(),
+        'vetStatistics': [],
+        'exerciseLog': [],
+        'mealLog':[],
+        'favoriteFoods':[]
+      });
+
+      print("Pet added to Firestore with ID: ${docRef.id}");
+          await getPets(true);
       notifyListeners();
     } catch (e) {
       print("Error adding pet to Firestore: $e");
@@ -817,6 +836,132 @@ void printSharedPreferences() {
       print("✅ Food data saved under barcode: $barcode");
     } catch (e) {
       print("❌ Error writing to Firestore: $e");
+    }
+  }
+
+  Future<void> updateProfileImage(File imageFile) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final ref = FirebaseStorage.instance.ref().child("profile_pictures/${user.uid}.jpg");
+    await ref.putFile(imageFile);
+    final url = await ref.getDownloadURL();
+
+    await setProfilePicture(url); // 👈 centralized update
+    notifyListeners();
+  }
+
+
+  Future<void> setProfilePicture(String url) async {
+    profileImageUrl = url;
+
+    await prefs.setString("profileImageUrl", url);
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await user.updatePhotoURL(url);
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> setMemberSince(DateTime date) async {
+    memberSince = _formatMemberSince(date);
+    await prefs.setString("memberSince", memberSince!);
+    notifyListeners();
+  }
+
+  String _formatMemberSince(DateTime date) {
+    final months = [
+      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    ];
+    return "${months[date.month - 1]} ${date.year}";
+  }
+
+  Future<void> updatePetProfile({
+  required Pet originalPet,
+  required String name,
+  required String breed,
+  required double weight,
+  required double age,
+  required bool neuteredSpayed,
+  File? imageFile
+}) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final query = await FirebaseFirestore.instance
+        .collection('pets')
+        .where('ownerUID', arrayContains: uid)
+        .where('name', isEqualTo: originalPet.name)
+        .limit(1)
+        .get();
+
+    if (query.docs.isEmpty) {
+      print("❌ Could not find pet to update");
+      return;
+    }
+
+    final doc = query.docs.first.reference;
+
+    String? imageUrl = originalPet.imageUrl;
+    if (imageFile != null) {
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child("pets/${uid}_${DateTime.now().millisecondsSinceEpoch}.jpg");
+      await ref.putFile(imageFile);
+      imageUrl = await ref.getDownloadURL();
+    }
+
+    final updatedData = {
+      'name': name,
+      'breed': breed,
+      'weight': weight,
+      'age': age,
+      'neuteredSpayed': neuteredSpayed,
+      'imageUrl':imageUrl
+    };
+
+    await doc.update(updatedData);
+
+    // Update locally
+    final index = pets.indexWhere((p) => p.name == originalPet.name);
+    if (index != -1) {
+      pets[index] = pets[index].copyWith(
+        name: name,
+        breed: breed,
+        weight: weight,
+        age: age,
+        neutered_spayed: neuteredSpayed,
+        imageUrl: imageUrl
+      );
+      await updateLocalPetData();
+      notifyListeners();
+    }
+  }
+
+  Future<void> removePet(Pet pet) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final petRef = await FirebaseFirestore.instance
+        .collection('pets')
+        .where('ownerUID', arrayContains: uid)
+        .where('name', isEqualTo: pet.name)
+        .limit(1)
+        .get();
+
+    if (petRef.docs.isNotEmpty) {
+      await petRef.docs.first.reference.delete();
+      pets.removeWhere((p) => p.name == pet.name);
+
+      if (pets.isEmpty) {
+        pets = [defaultPet];
+      }
+
+      await updateLocalPetData();
+      notifyListeners();
     }
   }
 }

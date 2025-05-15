@@ -42,6 +42,13 @@ class _LoginPageState extends State<LoginPage> {
       String thisName = user.displayName ?? "Guest";
       appState.changeIndex(2);
       await appState.setName(thisName);
+      if (user.photoURL != null) {
+        await appState.setProfilePicture(user.photoURL!);
+      }
+      if (user.metadata.creationTime != null) {
+        print("HI");
+        await appState.setMemberSince(user.metadata.creationTime!);
+      }
       await appState.getPets(false);
     }
     on FirebaseAuthException catch (e){
