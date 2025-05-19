@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'pet.dart';
@@ -19,6 +21,8 @@ class MyAppState extends ChangeNotifier {
   late SharedPreferencesWithCache prefs;
   bool hasLoadedData = false;
   List<Pet> pets = [];
+  String? profileImageUrl;
+  String? memberSince;
   
   MyAppState() {
     pets = [defaultPet];
@@ -182,7 +186,7 @@ class MyAppState extends ChangeNotifier {
   Future<void> init() async {
     prefs = await SharedPreferencesWithCache.create(
       cacheOptions: const SharedPreferencesWithCacheOptions(
-        allowList: <String>{"name", "pets", "lastResetDate"}
+        allowList: <String>{"name", "pets", "lastResetDate", "profileImageUrl", "memberSince"}
       )
     );
     await loadData();
@@ -235,7 +239,14 @@ class MyAppState extends ChangeNotifier {
     // ➜ Add this line
     if (serverDate == null) return;        // nothing to sync yet
 
+    if (localDate == null) {
+      // Just remember today’s date; skip the reset
+      await prefs.setString('lastResetDate', serverDate);
+      return;
+    }
+
     if (serverDate != localDate) {
+      print("server date: $serverDate local date: $localDate");
       await _refreshPetsFromServer();
       await _applyLocalReset();
       await prefs.setString('lastResetDate', serverDate);
@@ -249,8 +260,11 @@ class MyAppState extends ChangeNotifier {
     hasLoadedData = true;
     String? savedName = prefs.getString("name") ?? "Guest";
 
+    profileImageUrl = prefs.getString("profileImageUrl");
+
+    memberSince = prefs.getString("memberSince");
+
     name = savedName;
-    notifyListeners();
 
     final String? petsData = prefs.getString("pets");
     if (petsData != null && petsData.isNotEmpty) {
@@ -283,7 +297,9 @@ class MyAppState extends ChangeNotifier {
     // 🔥 Update FirebaseAuth display name if logged in
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      await user.updateProfile(displayName: name);
+      final savedPhotoURL = prefs.getString("profileImageUrl");
+      final currentPhotoURL = savedPhotoURL ?? user.photoURL;
+      await user.updateProfile(displayName: name, photoURL: currentPhotoURL);
     }
     notifyListeners();
   }
@@ -505,10 +521,14 @@ class MyAppState extends ChangeNotifier {
 
   
   void signOut() async {
+    final lastDate = prefs.getString('lastResetDate');
     await FirebaseAuth.instance.signOut();
     changeEnterAccountIndex(0);
     selectPet(0);
     await prefs.clear();
+    if (lastDate != null) {
+      await prefs.setString('lastResetDate', lastDate);
+    }
     printSharedPreferences();
     pets = [defaultPet];
     print(pets);
@@ -517,6 +537,8 @@ class MyAppState extends ChangeNotifier {
   }
   
 void printSharedPreferences() {
+  final user = FirebaseAuth.instance.currentUser;
+  
   print("📂 Checking SharedPreferences Content...");
 
   // ✅ Manually check and print each known key
@@ -530,6 +552,20 @@ void printSharedPreferences() {
     print("🔹 Pets: ${prefs.getString("pets")}");
   } else {
     print("⚠️ Pets key not found in SharedPreferences.");
+  }
+
+  if (prefs.containsKey("lastResetDate")) {
+    print("🔹 Last Reset Date: ${prefs.getString("lastResetDate")}");
+  } else {
+    print("⚠️ Last Reset Date not found in SharedPreferences.");
+  }
+
+  if (prefs.containsKey("profileImageUrl")) {
+    print("🔹 Profile Image Url: ${prefs.getString("profileImageUrl")}");
+  } else {
+    if (user != null){
+      print("⚠️ Profile Image Url not found in SharedPreferences. Let's check the user photoURL: ${user.photoURL}");
+    }
   }
 
   // ✅ If you store additional keys, add them here
@@ -819,4 +855,111 @@ void printSharedPreferences() {
       print("❌ Error writing to Firestore: $e");
     }
   }
+
+  Future<void> updateProfileImage(File imageFile) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final ref = FirebaseStorage.instance.ref().child("profile_pictures/${user.uid}.jpg");
+    await ref.putFile(imageFile);
+    final url = await ref.getDownloadURL();
+
+    await setProfilePicture(url); // 👈 centralized update
+    notifyListeners();
+  }
+
+  Future<void> setProfilePicture(String url) async {
+    profileImageUrl = url;
+
+    await prefs.setString("profileImageUrl", url);
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await user.updatePhotoURL(url);
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> setMemberSince(DateTime date) async {
+    memberSince = _formatMemberSince(date);
+    await prefs.setString("memberSince", memberSince!);
+    notifyListeners();
+  }
+
+  String _formatMemberSince(DateTime date) {
+    final months = [
+      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    ];
+    return "${months[date.month - 1]} ${date.year}";
+  }
+
+  Future<void> setLastResetDate(DateTime date) async {
+    memberSince = _formatMemberSince(date);
+    await prefs.setString("lastResetDate", memberSince!);
+    notifyListeners();
+  }
+
+  Future<void> updatePetProfile({
+    required Pet originalPet,
+    required String name,
+    required String breed,
+    required double weight,
+    required double age,
+    required bool neuteredSpayed,
+    File? imageFile
+  }) async {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+
+      final query = await FirebaseFirestore.instance
+          .collection('pets')
+          .where('ownerUID', arrayContains: uid)
+          .where('name', isEqualTo: originalPet.name)
+          .limit(1)
+          .get();
+
+      if (query.docs.isEmpty) {
+        print("❌ Could not find pet to update");
+        return;
+      }
+
+      final doc = query.docs.first.reference;
+
+      String? imageUrl = originalPet.imageUrl;
+      if (imageFile != null) {
+        final ref = FirebaseStorage.instance
+            .ref()
+            .child("pets/${uid}_${DateTime.now().millisecondsSinceEpoch}.jpg");
+        await ref.putFile(imageFile);
+        imageUrl = await ref.getDownloadURL();
+      }
+
+      final updatedData = {
+        'name': name,
+        'breed': breed,
+        'weight': weight,
+        'age': age,
+        'neuteredSpayed': neuteredSpayed,
+        'imageUrl': imageUrl
+      };
+
+      await doc.update(updatedData);
+
+      // Update locally
+      final index = pets.indexWhere((p) => p.name == originalPet.name);
+      if (index != -1) {
+        pets[index] = pets[index].copyWith(
+          name: name,
+          breed: breed,
+          weight: weight,
+          age: age,
+          neutered_spayed: neuteredSpayed,
+          imageUrl: imageUrl
+        );
+        await updateLocalPetData();
+        notifyListeners();
+      }
+    }
 }

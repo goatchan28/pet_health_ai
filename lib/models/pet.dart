@@ -1,7 +1,9 @@
+import "dart:convert";
 import "dart:math";
 
 import "package:cloud_firestore/cloud_firestore.dart";
 import "package:firebase_auth/firebase_auth.dart";
+import "package:firebase_storage/firebase_storage.dart";
 import "package:intl/intl.dart";
 import "package:pet_health_ai/models/app_state.dart";
 
@@ -11,6 +13,7 @@ class Pet {
   double weight; // Now mutable for recalculating calorie needs
   final double age;
   final bool neutered_spayed;
+  final String? imageUrl;
   double calorieIntake;
   Map<String, double> nutritionalRequirements;
   Map<String, double> nutritionalIntake;
@@ -27,6 +30,7 @@ class Pet {
     required this.weight,
     required this.age,
     required this.neutered_spayed,
+    this.imageUrl,
     this.calorieIntake = 0,
     List<Map<String, dynamic>>? vetStatistics,
     List<Map<String, dynamic>>? exerciseLog,
@@ -54,6 +58,7 @@ class Pet {
       'weight': weight,
       'age': age,
       'neuteredSpayed': neutered_spayed,
+      'imageUrl': imageUrl,
       'calorieIntake': calorieIntake,
       'nutritionalIntake': nutritionalIntake,
       'weeklyNutrients': weeklyNutrients,
@@ -72,6 +77,7 @@ class Pet {
       weight: (json['weight'] as num).toDouble(),
       age: (json['age'] as num).toDouble(),
       neutered_spayed: json['neuteredSpayed'],
+      imageUrl: json.containsKey('imageUrl') ? json['imageUrl'] : null,
       calorieIntake: (json['calorieIntake'] ?? 0).toDouble(),
       nutritionalIntake: Map<String, double>.from(json['nutritionalIntake'] ?? initializeIntake()),
       weeklyNutrients: Map<String, dynamic>.from(json['weeklyNutrients'] ?? initializeWeeklyNutrients()),
@@ -81,6 +87,32 @@ class Pet {
       favoriteFoods: List<Map<String, dynamic>>.from(json['favoriteFoods'])
     );
   }
+
+    Pet copyWith({
+      String? name,
+      String? breed,
+      double? weight,
+      double? age,
+      bool? neutered_spayed,
+      String? imageUrl
+    }) {
+      return Pet(
+        name: name ?? this.name,
+        breed: breed ?? this.breed,
+        weight: weight ?? this.weight,
+        age: age ?? this.age,
+        neutered_spayed: neutered_spayed ?? this.neutered_spayed,
+        imageUrl: imageUrl ?? this.imageUrl,
+        calorieIntake: calorieIntake,
+        nutritionalIntake: Map<String, double>.from(nutritionalIntake),
+        nutritionalRequirements: Map<String, double>.from(nutritionalRequirements),
+        weeklyNutrients: Map<String, dynamic>.from(weeklyNutrients ?? {}),
+        vetStatistics: List<Map<String, dynamic>>.from(vetStatistics ?? []),
+        exerciseLog: List<Map<String, dynamic>>.from(exerciseLog ?? []),
+        mealLog: List<Map<String, dynamic>>.from(mealLog ?? []),
+        favoriteFoods: List<Map<String, dynamic>>.from(favoriteFoods ?? []),
+      );
+    }
 
   // Function to calculate calorie requirements based on weight
   static double _calculateCalories(double weight) {
@@ -503,7 +535,23 @@ class Pet {
 
       if (add == true){
         await appState.fetchBarcodeData(barcode);
-        Map<String, dynamic> newFavorite = appState.scannedFoodData;
+        Map<String, dynamic> cleanedData = Map<String, dynamic>.from(appState.scannedFoodData)
+          ..remove('updatedAt');
+        
+        final rawFrontImage = cleanedData["frontImage"];
+        if (rawFrontImage is String && !rawFrontImage.startsWith("http")) {
+          try {
+            final ref = FirebaseStorage.instance.ref(rawFrontImage);
+            final resolvedUrl = await ref.getDownloadURL();
+            cleanedData["frontImage"] = resolvedUrl;
+          } catch (e) {
+            print("⚠️ Could not resolve frontImage: $e");
+            // Optional: remove it if resolution fails
+            cleanedData.remove("frontImage");
+          }
+        }
+
+        Map<String, dynamic> newFavorite = jsonDecode(jsonEncode(cleanedData));
         await petRef.update({
           "favoriteFoods": FieldValue.arrayUnion([newFavorite])
         });

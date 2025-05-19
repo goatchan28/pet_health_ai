@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:pet_health_ai/models/app_state.dart';
-import 'package:pet_health_ai/models/pet.dart';
 import 'package:pet_health_ai/pages/home_page.dart';
 import 'package:provider/provider.dart';
 
@@ -73,10 +72,12 @@ class FavoriteItem extends StatelessWidget {
     String productName = food["productName"] ?? "Unknown Product";
     String brandName = food["brandName"] ?? "Unknown Brand";
     String barcode = food["barcode"] ?? "N/A";
-    String imageUrl = food["imageUrl"] ?? ""; // If you plan to store images\
+    String imageUrl = food["frontImage"] ?? ""; // If you plan to store images\
 
     return GestureDetector(
-      onTap: (){showFeedDialog(context, appState.selectedPet, selectedProductName: productName);},
+      onTap: (){
+        showFeedDialog(context, appState.selectedPet, selectedProductName: productName);
+      },
       child: Card(
         margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
         child: ListTile(
@@ -105,10 +106,6 @@ class FavoriteItem extends StatelessWidget {
       ),
     );
   }
-}
-
-void addFavoritesDialog(BuildContext context, Pet pet){
-
 }
 
 class RecommendedFoodView extends StatelessWidget {
