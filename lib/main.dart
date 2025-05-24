@@ -71,7 +71,7 @@ class MyApp extends StatelessWidget {
         )
       ),
     );
-  }
+  } 
 }
 
 class MyHomePage extends StatefulWidget {
@@ -104,7 +104,12 @@ class _MyHomePageState extends State<MyHomePage> {
             child: Text("No camera found on this device.", style: TextStyle(fontSize: 18)),
           );
         } else {
-          page = CameraPage(camera: widget.camera!);
+          page = CameraPage(camera: widget.camera!, 
+            initialPage: appState.startWithManualCamera ? 1 : 0, 
+            initialBarcode: appState.manualCameraBarcode,
+          );
+          appState.startWithManualCamera = false;
+          appState.manualCameraBarcode   = null;
         }
       case 3:
         page = const FoodPage();

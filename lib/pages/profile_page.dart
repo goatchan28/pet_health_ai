@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -403,6 +404,14 @@ class _EditPetDialogState extends State<EditPetDialog> {
     }
   }
 
+  Future<void> _removePet() async {
+    final appState = context.read<MyAppState>();
+    await appState.removePet(widget.pet);
+    if (!context.mounted) return;
+    Navigator.of(context).pop();
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -468,6 +477,11 @@ class _EditPetDialogState extends State<EditPetDialog> {
                   setState(() => newImageFile = File(cropped.path));
                 }
               },
+            ),
+            TextButton.icon(
+              onPressed: _removePet,
+              icon: const Icon(Icons.delete_forever, color: Colors.red),
+              label: const Text("Remove Pet", style: TextStyle(color: Colors.red)),
             ),
           ],
         ),
@@ -540,6 +554,27 @@ class PetProfileCard extends StatelessWidget {
                     'Weight: ${pet.weight}, Age: ${pet.age} months',
                     style: TextStyle(color: Colors.grey[700]),
                   ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Pet ID: ${pet.id}',
+                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.copy, size: 16, color: Colors.grey[600]),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: pet.id));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Pet ID copied to clipboard')),
+                          );
+                        },
+                        tooltip: 'Copy Pet ID',
+                      ),
+                    ],
+                  )
                 ],
               ),
             ),

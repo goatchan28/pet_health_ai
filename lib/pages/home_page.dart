@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:pet_health_ai/widgets/progress_pic.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:pet_health_ai/models/pet.dart';
 import 'package:pet_health_ai/models/app_state.dart';
@@ -35,15 +35,20 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Center(
-          child: Text(widget.pet.name),
-        ),
+        centerTitle: true,
+        title: Text(widget.pet.name, style: TextStyle(fontWeight: FontWeight.w500),),
         actions: [
           GestureDetector(
             onTap: () => _showPetSelectionDialog(context, appState),
             child: CircleAvatar(
-              backgroundImage: AssetImage("assets/images/sigmalogo.png"),
+              backgroundColor: Colors.grey[300],
               radius: 20,
+              foregroundImage: appState.selectedPet.imageUrl != null
+                ? NetworkImage(appState.selectedPet.imageUrl!)
+                : null,
+              child: appState.selectedPet.imageUrl == null
+                ? Image.asset("assets/images/sigmalogo.png", fit: BoxFit.contain)
+                : null,
             ),
           ),
           SizedBox(height: 10),
@@ -103,19 +108,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           SliverToBoxAdapter(
-            child: Column(
-              children: [
-                Center(
-                  child: ElevatedButton(
-                    onPressed: () =>showFeedDialog(context, widget.pet),
-                    child: Text("Feed ${widget.pet.name}"),
-                  ),
-                ),
-                SizedBox(height: 20),
-              ],
-            ),
-          ),
-          SliverToBoxAdapter(
             child: Row(
               children: [
                 SizedBox(height: 400, width:20),
@@ -123,8 +115,8 @@ class _HomePageState extends State<HomePage> {
                   children: [
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(foregroundColor: theme.primaryColor, backgroundColor:theme.secondaryHeaderColor),
-                      onPressed: () {showMealLogDialog(context, appState.selectedPet, appState);}, 
-                      child: Text("Meal Log", style:TextStyle(fontSize: 16))
+                      onPressed: () => appState.changeIndex(2), 
+                      child: Text("Feed ${appState.selectedPet.name}", style:TextStyle(fontSize: 16)),
                     ),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(20),
@@ -139,26 +131,88 @@ class _HomePageState extends State<HomePage> {
                             List<Map<String, dynamic>> sortedLogs = List.from(widget.pet.mealLog!);
                             sortedLogs = sortedLogs.reversed.toList();
                             final log = sortedLogs[index];
+
+                            String formattedTime = log["time"];
+                            try {
+                              final dateTime = DateFormat("HH:mm").parse(log["time"]);
+                              formattedTime = DateFormat("h:mm a").format(dateTime); // ➜ 3:57 PM
+                            } catch (_) {
+                              formattedTime = log["time"]; // fallback if parsing fails
+                            }
                             return GestureDetector(
-                              onTap: () => showProductDialog(context, log["barcode"],log["amount"], appState),
+                              onTap: () => showProductDialog(context, 
+                                                            log["barcode"],
+                                                            log["amount"], 
+                                                            appState,
+                                                            productName : log['productName'],
+                                                            nutrition : log["nutrition"] == null
+                                                                ? null
+                                                                : Map<String, double>.from(log["nutrition"])),
                               child: Card(
-                                margin: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
-                                elevation: 3,
+                                margin: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                elevation: 4,
                                 child: Padding(
                                   padding: const EdgeInsets.all(10.0),
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        "🕒 Time: ${log["date_time"]}",
-                                        style: TextStyle(fontWeight: FontWeight.bold),
+                                      Center(
+                                        child: Text(
+                                          formattedTime,
+                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                          textAlign: TextAlign.center,
+                                        ),
                                       ),
-                                      Text("🏃 Barcode: ${log["barcode"]}"),
-                                      Text("Amount: ${log["amount"]}")
+                                      SizedBox(height: 6),
+                                      RichText(
+                                        text: TextSpan(
+                                          children: [
+                                            TextSpan(
+                                              text: "Product: ",
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.black, // Label color
+                                              ),
+                                            ),
+                                            TextSpan(
+                                              text: "${log["productName"]}",
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w500,
+                                                color: theme.primaryColor, // Highlighted color
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      SizedBox(height: 4),
+                                      RichText(
+                                        text: TextSpan(
+                                          children: [
+                                            TextSpan(
+                                              text: "Amount: ",
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.black,
+                                              ),
+                                            ),
+                                            TextSpan(
+                                              text: "${log["amount"]}",
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w500,
+                                                color: theme.colorScheme.secondary, // A distinct color for value
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
-                                
                               ),
                             );
                           }
@@ -188,21 +242,56 @@ class _HomePageState extends State<HomePage> {
                             List<Map<String, dynamic>> sortedLogs = List.from(widget.pet.exerciseLog!);
                             sortedLogs = sortedLogs.reversed.toList();
                             final log = sortedLogs[index];
+
+                            String formattedTime = log["time"];
+                            try {
+                              final dateTime = DateFormat("HH:mm").parse(log["time"]);
+                              formattedTime = DateFormat("h:mm a").format(dateTime); // ➜ 3:57 PM
+                            } catch (_) {
+                              formattedTime = log["time"]; // fallback if parsing fails
+                            }
                             return Card(
-                              margin: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
-                              elevation: 3,
+                              margin: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              elevation: 4,
                               child: Padding(
-                                padding: const EdgeInsets.all(10.0),
+                                padding: const EdgeInsets.all(12.0),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      "🕒 Time: ${log["date_time"]}",
-                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                    Center(
+                                      child: Text(
+                                        formattedTime,
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
                                     ),
-                                    Text("🏃 Exercise: ${log["exerciseType"]}"),
-                                    Text("⏳ Minutes: ${log["minutes"]} min"),
-                                    Text("🔥 Calories Burned: ${log["caloriesBurnt"]} kcal"),
+                                    SizedBox(height: 8),
+                                    Center(
+                                      child: Text(
+                                        "${(log["minutes"] as num).toInt()} min ${log["exerciseType"]?.toLowerCase() ?? 'exercise'}",
+                                        style: TextStyle(
+                                          fontSize: 17,
+                                          fontWeight: FontWeight.w600,
+                                          color: theme.primaryColor,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                    SizedBox(height: 6),
+                                    Text(
+                                      "🔥 Calories Burned: N/A",
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.grey[600], // subtle tone to show it's pending
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
                                   ],
                                 ),
                               ),
@@ -218,31 +307,20 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           SliverToBoxAdapter(
-            child: Column(
-              children: [
-                SizedBox(height:20),
-                Center(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      appState.changeIndex(1);
-                    },
-                    child: Text('Buddy\'s Progress'),
-                  ),
-                ),
-                SizedBox(height:20),
-              ],
-            ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 15,),
+            )
           ),
-          SliverToBoxAdapter(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png"),
-                ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png"),
-                ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png")
-              ],
-            ),
-          ),
+          // SliverToBoxAdapter(
+          //   child: Row(
+          //     mainAxisAlignment: MainAxisAlignment.center,
+          //     children: [
+          //       ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png"),
+          //       ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png"),
+          //       ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png")
+          //     ],
+          //   ),
+          // ),
         ],
       )
     );
@@ -261,7 +339,13 @@ class _HomePageState extends State<HomePage> {
               Pet pet = entry.value;
               return ListTile(
                 leading: CircleAvatar(
-                  backgroundImage: AssetImage("assets/images/sigmalogo.png"),
+                  backgroundColor: Colors.grey[300],
+                  foregroundImage: pet.imageUrl != null 
+                    ? NetworkImage(pet.imageUrl!)
+                    : null,
+                  child: pet.imageUrl == null
+                    ? Image.asset("assets/images/sigmalogo.png", fit: BoxFit.contain)
+                    : null
                 ),
                 title: Text(pet.name),
                 onTap: () {
@@ -358,9 +442,11 @@ class _HomePageState extends State<HomePage> {
 
 Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProductName, String? selectedProductBarcode}) {
   var appState = context.read<MyAppState>();
+  ScrollController scrollController = ScrollController();
   TextEditingController barcodeController = TextEditingController();
   List<String> unitOptions = ["Grams", "Cups", "Ounces"];
   TextEditingController amountController = TextEditingController();
+  TextEditingController foodNameController = TextEditingController();
   String? unitChosen;
   String? favoriteChosen = selectedProductName;
   Map<String, TextEditingController> manualControllers = {};
@@ -393,6 +479,7 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
           return AlertDialog(
             title: Text("Feed ${pet.name}"),
             content: SingleChildScrollView( // ✅ Prevents Overflow Errors
+              controller: scrollController,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -430,25 +517,6 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 5),
                           child: DropdownButtonFormField<String>(
-                            value: unitChosen,
-                            decoration: InputDecoration(
-                              labelText: "Choose Unit",
-                              border: OutlineInputBorder(),
-                            ),
-                            items: unitOptions.map((unit) {
-                              return DropdownMenuItem<String>(
-                                value: unit,
-                                child: Text(unit),
-                            );
-                            }).toList(),
-                            onChanged: (String? newValue){
-                              unitChosen = newValue;
-                            }
-                          )
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 5),
-                          child: DropdownButtonFormField<String>(
                             value: favoriteChosen,
                             decoration: InputDecoration(
                               labelText: "Choose Favorite Food",
@@ -479,17 +547,36 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                         Padding(
                           padding: const EdgeInsets.all(8.0),
                           child: TextField(
-                            controller: amountController,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(labelText: "Enter Amount"),
+                            controller: barcodeController,
+                            keyboardType: TextInputType.text,
+                            decoration: InputDecoration(labelText: "Enter Barcode"),
                           ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 5),
+                          child: DropdownButtonFormField<String>(
+                            value: unitChosen,
+                            decoration: InputDecoration(
+                              labelText: "Choose Unit",
+                              border: OutlineInputBorder(),
+                            ),
+                            items: unitOptions.map((unit) {
+                              return DropdownMenuItem<String>(
+                                value: unit,
+                                child: Text(unit),
+                            );
+                            }).toList(),
+                            onChanged: (String? newValue){
+                              unitChosen = newValue;
+                            }
+                          )
                         ),
                         Padding(
                           padding: const EdgeInsets.all(8.0),
                           child: TextField(
-                            controller: barcodeController,
-                            keyboardType: TextInputType.text,
-                            decoration: InputDecoration(labelText: "Enter Barcode"),
+                            controller: amountController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(labelText: "Enter Amount"),
                           ),
                         ),
                         if (foodData == null && appState.barcodeNotFound)...[
@@ -497,8 +584,13 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                             children: [
                               SizedBox(height: 10),
                               ElevatedButton(
-                                onPressed: () => setState(() => mode = 1), 
-                                child: Text("Scan Nutrition Label")
+                                onPressed: () {
+                                  final barcode = barcodeController.text.trim(); 
+                                  appState.startManualPhotoFlow(barcode);
+                                  appState.barcodeNotFound = false;
+                                  Navigator.pop(context);
+                                }, 
+                                child: Text("Take Pictures of Food Package")
                               )
                             ],
                           ),
@@ -509,15 +601,70 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                               SizedBox(height: 10),
                                 Column(
                                   children: [
-                                    Text("Food Found:", style: TextStyle(fontWeight: FontWeight.bold)),
-                                    Text("Product Name: ${foodData!['productName']}"),
-                                    Text("Brand: ${foodData!['brandName']}"),
-                                    for (var entry in foodData!['nutritionalInfo'].entries)
-                                      Text("${entry.key}: ${entry.value}g"),
+                                    SizedBox(height: 10),
+                                    Text("Food Found:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                    const SizedBox(height: 6),
+                                    RichText(
+                                      text: TextSpan(
+                                        style: TextStyle(fontSize: 14, color: Colors.black),
+                                        children: [
+                                          TextSpan(text: 'Product Name: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                                          TextSpan(
+                                            text: '${foodData!['productName']}',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.indigo[700], // ✅ More contrast than grey
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    RichText(
+                                      text: TextSpan(
+                                        style: TextStyle(fontSize: 14, color: Colors.black),
+                                        children: [
+                                          TextSpan(text: 'Brand: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                                          TextSpan(
+                                            text: '${foodData!['brandName']}',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.indigo[700],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+
+
+                                    const SizedBox(height: 10),
+                                    Text("Nutritional Info:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[100],
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          for (var entry in foodData!['nutritionalInfo'].entries)
+                                            Padding(
+                                              padding: const EdgeInsets.symmetric(vertical: 2),
+                                              child: Text("${entry.key}: ${entry.value}g"),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
                                     ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.blueAccent,
+                                        foregroundColor: Colors.white,
+                                      ),
                                       onPressed: () {
                                         if ((mode == 0) && foodData != null) {
-                                          appState.updatePetIntake(pet, foodData!['nutritionalInfo'], foodData!['barcode'], "${foodData!['amount']} $unitChosen");
+                                          appState.updatePetIntake(pet, foodData!['nutritionalInfo'], foodData!['barcode'], foodData!['productName'], "${foodData!['amount']} $unitChosen");
                                           appState.barcodeNotFound = false;
                                           setState(() {}); // Refresh UI
                                           Navigator.pop(context);
@@ -539,7 +686,7 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                                             print("❌ Error: No unit chosen");
                                             return;
                                           }
-                                          appState.updatePetIntake(pet, updatedValues, "No Barcode", "$amount $unitChosen");
+                                          appState.updatePetIntake(pet, updatedValues, "No Barcode", "No Name", "$amount $unitChosen");
                                           appState.barcodeNotFound = false;
                                           setState(() {}); // Refresh UI
                                           Navigator.pop(context);
@@ -553,16 +700,6 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                             ),
                         ],
                       ]
-                      )
-                  // ✅ Nutrition Label Scan UI    
-                  else if (mode == 1)
-                    Column(
-                      children: [
-                        ElevatedButton(
-                          onPressed: () {appState.changeIndex(2); appState.barcodeNotFound = false; Navigator.pop(context);}, 
-                          child: Text("Go To Camera")
-                        ),
-                      ],
                     )
                   // ✅ Manual Entry UI (Fixed ListView inside AlertDialog)
                   else if (mode == 2)
@@ -571,29 +708,17 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                         Padding(
                           padding: const EdgeInsets.all(8.0),
                           child: TextField(
-                            controller: amountController,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(labelText: "Enter Amount"),
+                            controller: foodNameController,
+                            decoration: const InputDecoration(labelText: "Food Name"),
                           ),
                         ),
                         Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 5),
-                          child: DropdownButtonFormField<String>(
-                            value: unitChosen,
-                            decoration: InputDecoration(
-                              labelText: "Choose Unit",
-                              border: OutlineInputBorder(),
-                            ),
-                            items: unitOptions.map((unit) {
-                              return DropdownMenuItem<String>(
-                                value: unit,
-                                child: Text(unit),
-                            );
-                            }).toList(),
-                            onChanged: (String? newValue){
-                              unitChosen = newValue;
-                            }
-                          )
+                          padding: const EdgeInsets.all(8.0),
+                          child: TextField(
+                            controller: amountController,
+                            keyboardType: TextInputType.text,
+                            decoration: InputDecoration(labelText: "Enter Amount"),
+                          ),
                         ),
                         Text(
                           "Enter Nutrients and Calories",
@@ -633,24 +758,61 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
               ElevatedButton(
                 onPressed: () async {
                   FocusScope.of(context).unfocus();
-                  String? barcode = barcodeController.text;
-                  double? amount = double.tryParse(amountController.text);
-                  if (unitChosen == null || amountController.text.isEmpty) {
-                    print("❌ Error: Unit or amount missing");
-                    return;
+                  if (mode == 0){
+                    String? barcode = barcodeController.text;
+                    if (barcode.isEmpty) {
+                      print("❌ Error: Barcode missing");
+                      return;
+                    }
+                    final amount = double.tryParse(amountController.text);
+                    if (amount == null || amount <= 0) {
+                      print("❌ Error: Invalid amount entered");
+                      return;
+                    }
+                    if (unitChosen == null || amountController.text.isEmpty) {
+                      print("❌ Error: Unit or amount missing");
+                      return;
+                    }
+                    appState.barcodeNotFound = false;
+                    foodData = await appState.getFoodIntakeFromBarcode(barcode, unitChosen!, amount);
+                    print("barcodeNotFound status: ${appState.barcodeNotFound}");
+                    setState(() {});
+
+                    await Future.delayed(Duration(milliseconds: 100)); // give UI a frame to build
+                    scrollController.animateTo(
+                      scrollController.position.maxScrollExtent,
+                      duration: Duration(milliseconds: 400),
+                      curve: Curves.easeOut,
+                    );
                   }
-                  if (amount == null || amount <= 0) {
-                    print("❌ Error: Invalid amount entered");
-                    return;
+                  else if (mode == 2){
+                    final Map<String, double> manualNutrition = {};
+                    manualControllers.forEach((key, ctrl) {
+                      final val = double.tryParse(ctrl.text.trim());
+                      if (val != null && val > 0) {
+                        // convert to the nearest integer
+                        manualNutrition[key] = val.round().toDouble();
+                      }
+                    });
+                    final foodName = foodNameController.text.trim();
+                    if (foodName.isEmpty) {
+                      print("❌ Error: Please enter a food name");
+                      return;
+                    }
+                    final amountText = amountController.text.trim();   // ← keep as text
+                    if (amountText.isEmpty) {
+                      print("❌ Error: Please enter an amount");
+                      return;
+                    }
+                    appState.updatePetIntake(
+                      pet,
+                      manualNutrition,
+                      "MANUAL_ENTRY",          // barcode placeholder
+                      foodName,          // product name placeholder
+                      amountText,
+                    );
+                    Navigator.pop(context);
                   }
-                  if (unitChosen == null || barcode.isEmpty) {
-                    print("❌ Error: Unit or barcode missing");
-                    return;
-                  }
-                  appState.barcodeNotFound = false;
-                  foodData = await appState.getFoodIntakeFromBarcode(barcode, unitChosen!, amount);
-                  print("barcodeNotFound status: ${appState.barcodeNotFound}");
-                  setState(() {});
                 },
                 child: Text("Submit"),
               ),
@@ -880,217 +1042,130 @@ void _showMoreNutrientsPage(BuildContext context, Pet pet){
   );
 }
 
-void showMealLogDialog(BuildContext context, Pet pet, MyAppState appState){
-  List<Map<String, dynamic>>? mealLog = pet.mealLog;
-  if (mealLog == null || mealLog.isEmpty) {
-    showDialog(
+Future<void> showProductDialog(BuildContext context, 
+    String barcode, 
+    String amount, 
+    MyAppState appState,
+    {String? productName, Map<String, double>? nutrition,}
+  ) async {
+    final bool isManual = barcode == "MANUAL_ENTRY";
+
+    if (!isManual) {
+      await appState.fetchBarcodeData(barcode);
+      if (!context.mounted) return;
+    }
+
+    if (!context.mounted) return;
+
+    final scanned = appState.scannedFoodData;
+    final String prodName  = isManual
+      ? (productName ?? "Manual Entry")
+      : (scanned["productName"] ?? "Unknown Product");
+    final String brandName = isManual
+      ? "Manual Entry"
+      : (scanned["brandName"] ?? "Unknown Brand");
+    final Map<String,double> nutritionalInfo = isManual
+      ? (nutrition ?? <String,double>{})
+      : (scanned["nutritionalInfo"] as Map<String,double>? ?? {});
+    final guaranteedAnalysis = isManual
+      ? <String,double>{}
+      : ((scanned["guaranteedAnalysis"] as Map<String,dynamic>? ) ?? {})
+          .map((k,v)=>MapEntry(k,(v as num?)?.toDouble() ?? 0.0));
+
+    bool isFavorite = !isManual &&
+      appState.selectedPet.favoriteFoods!
+          .any((food) => food["barcode"] == barcode);
+    final bool staticIsFavorite = isFavorite;
+    bool isProcessing = false;
+
+    await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text("Meal Log"),
-        content: Text("No meals logged."),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("Close"),
-          ),
-        ],
-      ),
-    );
-    return;
-  }
-
-  List<Map<String, dynamic>> reversedMealLog = List.from(mealLog.reversed);
-
-  showDialog(
-    context: context, 
-    builder: (context){
-      return AlertDialog(
-        title: Text("Meal Log"),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: reversedMealLog.map((meal) {
-              return FutureBuilder<void>(
-                future: () async {
-                  appState.scannedFoodData = {};
-                  appState.barcodeNotFound = false;
-
-                  await appState.fetchBarcodeData(meal["barcode"]);
-
-                  return appState.scannedFoodData.isNotEmpty
-                      ? Map<String, dynamic>.from(appState.scannedFoodData)
-                      : null;
-                }(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return Card(
-                      margin: EdgeInsets.symmetric(vertical: 8),
-                      child: ListTile(
-                        title: Text("Fetching data..."),
-                        subtitle: Text("Barcode: ${meal["barcode"]}"),
-                      ),
-                    );
-                  }
-
-                  if (appState.barcodeNotFound || appState.scannedFoodData.isEmpty) {
-                    return Card(
-                      margin: EdgeInsets.symmetric(vertical: 8),
-                      child: ListTile(
-                        title: Text("Product not found"),
-                        subtitle: Text("Barcode: ${meal["barcode"]}"),
-                      ),
-                    );
-                  }
-
-                  final Map<String, dynamic> productData = snapshot.data as Map<String, dynamic>;
-
-                  String productName = productData["productName"] as String? ?? "Unknown Product";
-                  String brandName = productData["brandName"] as String? ?? "Unknown Brand";
-
-                  return Card(
-                    margin: EdgeInsets.symmetric(vertical: 8),
-                    child: ListTile(
-                      title: Text(productName, style: TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState)
+          {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Flexible(
+                    child: Text.rich(
+                      TextSpan(
+                        text: '$prodName\n', // First line with the product name
+                        style: TextStyle(fontWeight: FontWeight.bold),
                         children: [
-                          Text("Brand: $brandName"),
-                          Text("Time: ${meal["date_time"]}"),
-                          Text("Amount: ${meal["amount"]}"),
-                          Text("Barcode: ${meal["barcode"]}"),
+                          TextSpan(
+                            text: '($brandName)', // Second line with the brand name
+                            style: TextStyle(fontWeight: FontWeight.normal),
+                          ),
                         ],
                       ),
                     ),
-                  );
-                },
-              );
-            }).toList(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("Close"),
-          ),
-        ],
-      );
-    }
-  );
-}
-
-Future<void> showProductDialog(BuildContext context, String barcode, String amount, MyAppState appState) async {
-  await appState.fetchBarcodeData(barcode);
-
-  if (!context.mounted) return;
-
-  final scannedFoodData = appState.scannedFoodData;
-  final productName = scannedFoodData["productName"] ?? "Unknown Product";
-  final brandName = scannedFoodData["brandName"] ?? "Unknown Brand";
-  final nutritionalInfo = scannedFoodData["nutritionalInfo"] as Map<String, double>? ?? {};
-  final Map<String, double> guaranteedAnalysis =
-      ((scannedFoodData['guaranteedAnalysis'] as Map<String, dynamic>?) ?? {})
-          .map((k, v) => MapEntry(k, (v as num?)?.toDouble() ?? 0.0));
-
-
-
-  bool isFavorite = appState.selectedPet.favoriteFoods!
-      .any((food) => food["barcode"] == barcode);
-
-  bool staticIsFavorite = appState.selectedPet.favoriteFoods!
-      .any((food) => food["barcode"] == barcode);
-      
-  bool isProcessing = false;
-
-  await showDialog(
-    context: context,
-    builder: (context) {
-      return StatefulBuilder(
-        builder: (context, setDialogState)
-        {
-          return AlertDialog(
-            title: Row(
-              children: [
-                Flexible(
-                  child: Text.rich(
-                    TextSpan(
-                      text: '$productName\n', // First line with the product name
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                      children: [
-                        TextSpan(
-                          text: '($brandName)', // Second line with the brand name
-                          style: TextStyle(fontWeight: FontWeight.normal),
-                        ),
-                      ],
-                    ),
                   ),
-                ),
-                SizedBox(width: 8), // Space between the product name/brand and the star
-                IconButton(
-                  icon: Icon(
-                    isFavorite ? Icons.star : Icons.star_border,
-                    color: Colors.amber,
-                    size: 50, // Gold color for the star
-                  ),
-                  onPressed: ()  {
-                    setDialogState(() {
-                      isFavorite = !isFavorite; // Toggle UI state
-                    });
-                  },
-                ),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Display barcode
-                  Text("Barcode: $barcode", style: TextStyle(fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8), // Add some space before nutritional info
-                  Text("Amount: $amount", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8),
-                  if (nutritionalInfo.isNotEmpty) ...[
-                    Text("Nutritional Information (per 100g):", style: TextStyle(fontWeight: FontWeight.bold)),
-                    ...nutritionalInfo.entries.map(
-                      (e) => Text("${e.key}: ${e.value.toStringAsFixed(2)} g"),
+                  SizedBox(width: 8), // Space between the product name/brand and the star
+                  if (!isManual)
+                    IconButton(
+                      icon: Icon(
+                        isFavorite ? Icons.star : Icons.star_border,
+                        color: Colors.amber,
+                        size: 50, // Gold color for the star
+                      ),
+                      onPressed: ()  {
+                        setDialogState(() {
+                          isFavorite = !isFavorite; // Toggle UI state
+                        });
+                      },
                     ),
-                  ] else if (guaranteedAnalysis.isNotEmpty) ...[
-                    Text("Guaranteed Analysis:", style: TextStyle(fontWeight: FontWeight.bold)),
-                    ...guaranteedAnalysis.entries.map(
-                      (e) => Text("${e.key}: ${e.value.toStringAsFixed(2)} %"),
-                    ),
-                  ] else ...[
-                    const Text("No nutritional information available."),
-                  ],
                 ],
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: isProcessing ? null : () async {
-                  setDialogState(() {
-                    isProcessing = true; // Start processing
-                  });
-
-                  if (isFavorite!=staticIsFavorite){
-                    await appState.selectedPet.changeFavorites(barcode, appState);
-                  }
-                  setDialogState(() {
-                    isProcessing = false; // Done processing
-                  });
-                  appState.scannedFoodData = {}; // ✅ Reset scanned food data
-                  appState.barcodeNotFound = false;
-                  if (!context.mounted) return;
-                  Navigator.pop(context);
-                },
-                child: Text('Close'),
+              content: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Display barcode
+                    Text("Barcode: $barcode", style: TextStyle(fontWeight: FontWeight.bold)),
+                    SizedBox(height: 8), // Add some space before nutritional info
+                    Text("Amount: $amount", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    SizedBox(height: 8),
+                    if (nutritionalInfo.isNotEmpty) ...[
+                      Text("Nutritional Information (per 100g):", style: TextStyle(fontWeight: FontWeight.bold)),
+                      ...nutritionalInfo.entries.map(
+                        (e) => Text("${e.key}: ${e.value.toStringAsFixed(2)} g"),
+                      ),
+                    ] else if (guaranteedAnalysis.isNotEmpty) ...[
+                      Text("Guaranteed Analysis:", style: TextStyle(fontWeight: FontWeight.bold)),
+                      ...guaranteedAnalysis.entries.map(
+                        (e) => Text("${e.key}: ${e.value.toStringAsFixed(2)} %"),
+                      ),
+                    ] else ...[
+                      const Text("No nutritional information available."),
+                    ],
+                  ],
+                ),
               ),
-            ],
-          );
-        }
-      );
-    },
-  );
-}
+              actions: [
+                TextButton(
+                  onPressed: isProcessing ? null : () async {
+                    setDialogState(() {
+                      isProcessing = true; // Start processing
+                    });
 
-
-
+                    if (isFavorite!=staticIsFavorite && !isManual){
+                      await appState.selectedPet.changeFavorites(barcode, appState);
+                    }
+                    setDialogState(() {
+                      isProcessing = false; // Done processing
+                    });
+                    appState.scannedFoodData = {}; // ✅ Reset scanned food data
+                    appState.barcodeNotFound = false;
+                    if (!context.mounted) return;
+                    Navigator.pop(context);
+                  },
+                  child: Text('Close'),
+                ),
+              ],
+            );
+          }
+        );
+      },
+    );
+  }

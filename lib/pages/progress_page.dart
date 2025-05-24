@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:pet_health_ai/models/app_state.dart';
 import 'package:pet_health_ai/models/pet.dart';
 import 'package:pet_health_ai/widgets/charts.dart';
-import 'package:pet_health_ai/widgets/progress_pic.dart';
 import 'package:provider/provider.dart';
 
 class ProgressTrackerPage extends StatefulWidget {
@@ -18,6 +17,13 @@ class _ProgressTrackerPageState extends State<ProgressTrackerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(     
+        centerTitle: true,
+        title: const Text(
+          'Progress & Trends',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
@@ -35,7 +41,7 @@ class _ProgressTrackerPageState extends State<ProgressTrackerPage> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: LineChartSample1(width: double.infinity,height: 273, pet: widget.pet),
+              child: VetVistsChart(width: double.infinity,height: 200, pet: widget.pet),
               // child: ClipRRect(
               //   borderRadius: BorderRadius.circular(10),
               //   child: Container(
@@ -45,32 +51,16 @@ class _ProgressTrackerPageState extends State<ProgressTrackerPage> {
               // ),
             ),
           ),
-          SliverToBoxAdapter(
-            child: Column(
-              children: [
-                SizedBox(height: 20,),
-                Center(
-                  child: ElevatedButton(
-                    onPressed: () => showVetVisitDialog(context, widget.pet),
-                    child: Text("Record Vet Visit")
-                  ),
-                ),
-              ],
-            )
-          ),
-          SliverToBoxAdapter(
-              child: SizedBox(height: 20),
-            ),
-          SliverToBoxAdapter(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png"),
-                  ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png"),
-                  ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png")
-                ],
-              ),
-            ),
+          // SliverToBoxAdapter(
+          //     child: Row(
+          //       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          //       children: [
+          //         ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png"),
+          //         ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png"),
+          //         ProgressPictureCard(date: '03-20-25', imageUrl: "assets/images/sigmalogo.png")
+          //       ],
+          //     ),
+          //   ),
         ],
       ),
     );
@@ -148,36 +138,27 @@ Future<void> showVetVisitDialog(BuildContext context, Pet pet) async {
     builder: (context) {
       return AlertDialog(
         title: Text("Vet Visit"),
-        content: SizedBox(
-          width: double.maxFinite,
-          height:350,
+        content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text("Record ${pet.name} 's Vet Visit", style: TextStyle(fontWeight: FontWeight.bold)),
-              SizedBox(
-                height: 330,
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: controllers.length,
-                  itemBuilder: (context, index) {
-                    String key = controllers.keys.elementAt(index);
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 5),
-                      child: TextField(
-                        controller: controllers[key],
-                        keyboardType: (key.contains("Date(MM/DD/YY or MM-DD-YY)") || key.contains("Notes"))
-                            ? TextInputType.text
-                            : TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: key,
-                          errorText: errors[key], // Shows error message if invalid
-                        ),
-                      )
-                    );
-                  }
-                )
-              )
+              const SizedBox(height: 12),
+              ...controllers.keys.map((key) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: TextField(
+                    controller: controllers[key],
+                    keyboardType: (key.contains("Date") || key.contains("Notes"))
+                        ? TextInputType.text
+                        : TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: key,
+                      errorText: errors[key],
+                    ),
+                  ),
+                );
+              })
             ],
           )
         ),

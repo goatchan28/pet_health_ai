@@ -12,7 +12,10 @@ import 'package:uuid/uuid.dart';
 
 class CameraPage extends StatefulWidget {
   final CameraDescription camera;
-  const CameraPage({super.key, required this.camera});
+
+  final int initialPage;
+  final String? initialBarcode;
+  const CameraPage({super.key, required this.camera, this.initialPage = 0, this.initialBarcode});
 
   @override
   State<CameraPage> createState() => _CameraPageState();
@@ -24,8 +27,8 @@ class _CameraPageState extends State<CameraPage> {
   @override
   void initState() {
     super.initState();
-    _pageCtrl = PageController();              // new
-    _pendingBarcode = "";
+    _pageCtrl = PageController(initialPage: widget.initialPage);              // new
+    _pendingBarcode = widget.initialBarcode ?? "";
   }
 
   @override
@@ -239,6 +242,34 @@ class _QRScannerViewState extends State<QRScannerView> {
               },
             ),
           ),
+          Positioned(
+            bottom: 40,
+            left: 20,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black45,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              ),
+              icon: Image.asset("assets/images/sigmalogo.png", width: 30, height: 30, fit: BoxFit.cover),
+              label: const Text('Feed'),
+              onPressed: () async {
+                if (_busy) return;              // ignore while dialog/scan busy
+                _busy = true;
+                await controller.stop();        // 1️⃣ pause camera
+
+                if (!context.mounted) return;
+                final appState = context.read<MyAppState>();
+                await showFeedDialog(           // 2️⃣ open dialog
+                  context,
+                  appState.selectedPet,
+                );
+
+                if (mounted) controller.start(); // 3️⃣ resume scan
+                _busy = false;
+              },
+            )
+          )
         ],
       ),
     );
@@ -739,7 +770,7 @@ class _ReviewFormState extends State<_ReviewForm> {
               TextField(
                 controller: _gaCtrls![k],
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(suffixText: 'g'),
+                decoration: const InputDecoration(suffixText: '%'),
               ),
               const SizedBox(height: 12),
             ],

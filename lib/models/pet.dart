@@ -8,6 +8,7 @@ import "package:intl/intl.dart";
 import "package:pet_health_ai/models/app_state.dart";
 
 class Pet {
+  final String id;
   final String name;
   final String breed;
   double weight; // Now mutable for recalculating calorie needs
@@ -25,6 +26,7 @@ class Pet {
   late double calorieRequirement; // Auto-calculated based on weight
 
   Pet({
+    required this.id,
     required this.name,
     required this.breed,
     required this.weight,
@@ -53,6 +55,7 @@ class Pet {
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'name': name,
       'breed': breed,
       'weight': weight,
@@ -70,8 +73,9 @@ class Pet {
   }
 
   // ✅ Create Pet object from JSON
-  factory Pet.fromJson(Map<String, dynamic> json) {
+  factory Pet.fromJson(Map<String, dynamic> json, String id) {
     return Pet(
+      id: id,
       name: json['name'],
       breed: json['breed'],
       weight: (json['weight'] as num).toDouble(),
@@ -97,6 +101,7 @@ class Pet {
       String? imageUrl
     }) {
       return Pet(
+        id: id,
         name: name ?? this.name,
         breed: breed ?? this.breed,
         weight: weight ?? this.weight,
@@ -317,7 +322,7 @@ class Pet {
     nutritionalRequirements["Carbohydrates"] = carbCalories / 4; // Convert to grams
   }
 
-  Future<void> addFood(Map<String, double> foodNutrition, String barcode, String amount, MyAppState appState) async {
+  Future<void> addFood(Map<String, double> foodNutrition, String barcode, String productName, String amount, MyAppState appState) async {
    try{
     print("🔍 Scanned Food Data: ${appState.scannedFoodData}");
      String? petID = await getCurrentPetID();
@@ -340,7 +345,7 @@ class Pet {
      await petRef.update(updateData);
      print("✅ Nutritional intake updated for pet: $name (ID: $petID)");
 
-     await logMeal(appState, barcode, amount);
+     await logMeal(appState, barcode, productName, amount, nutrition: barcode == "MANUAL_ENTRY" ? foodNutrition : null);
      await appState.updateLocalPetData();
    }
    catch(e){
@@ -407,8 +412,17 @@ class Pet {
           "bcs": bcs,
           "notes": notes,
         };
+
+        DateTime newDate = parseDate(date);
+        DateTime? latestDate;
+        if (vetStatistics != null && vetStatistics!.isNotEmpty) {
+          latestDate = vetStatistics!
+              .map((entry) => parseDate(entry["date"]))
+              .reduce((a, b) => a.isAfter(b) ? a : b);
+        }
+
         double? validWeight = double.tryParse(weight.toString());
-        if(validWeight != null){
+        if(validWeight != null && (latestDate ==null || newDate.isAfter(latestDate))){
           updateWeight(validWeight);
           await petRef.update({
             "weight": weight,
@@ -437,6 +451,18 @@ class Pet {
       catch(e){print(e);}
     }
 
+  DateTime parseDate(String date) {
+    final cleaned = date.replaceAll('/', '-');
+    List<String> parts = cleaned.split('-');
+    if (parts.length != 3) throw FormatException("Invalid date: $date");
+
+    int month = int.parse(parts[0]);
+    int day = int.parse(parts[1]);
+    int year = int.parse(parts[2]) + 2000;
+
+    return DateTime(year, month, day);
+  }
+
   Future<void> logExercise({ 
     required String exerciseType,
     required double minutes,
@@ -453,7 +479,7 @@ class Pet {
       double caloriesBurnt = 0; //will do the function later
       final petRef = FirebaseFirestore.instance.collection("pets").doc(petID);
       Map<String, dynamic> exerciseLogEntry = {
-        "date_time":formattedTime,  // Store date as a string (YYYY-MM-DD format recommended)
+        "time":formattedTime,  // Store date as a string (YYYY-MM-DD format recommended)
         "exerciseType": exerciseType,
         "minutes": minutes,
         "caloriesBurnt": caloriesBurnt,
@@ -464,7 +490,7 @@ class Pet {
       });
 
       exerciseLog!.add({
-        "date_time":formattedTime,  // Store date as a string (YYYY-MM-DD format recommended)
+        "time":formattedTime,  // Store date as a string (YYYY-MM-DD format recommended)
         "exerciseType": exerciseType,
         "minutes": minutes,
         "caloriesBurnt": caloriesBurnt,
@@ -481,7 +507,9 @@ class Pet {
   Future<void> logMeal( 
     MyAppState appState,
     String barcode,
-    String amount
+    String productName,
+    String amount,
+    {Map<String,double>? nutrition}
   ) async{
     final now = DateTime.now();
     final formattedTime = DateFormat.Hm().format(now);
@@ -494,10 +522,14 @@ class Pet {
       }
       final petRef = FirebaseFirestore.instance.collection("pets").doc(petID);
       Map<String, dynamic> mealLogEntry = {
-        "date_time":formattedTime,  // Store date as a string (YYYY-MM-DD format recommended)
+        "time":formattedTime,  // Store date as a string (YYYY-MM-DD format recommended)
         "barcode": barcode,
+        "productName": productName,
         "amount":amount
       };
+      if (nutrition != null) {
+        mealLogEntry["nutrition"] = nutrition;   // store only for manual entry
+      }
         
       await petRef.update({
         "mealLog": FieldValue.arrayUnion([mealLogEntry])
@@ -515,6 +547,10 @@ class Pet {
 
   Future<void> changeFavorites(String barcode, MyAppState appState)async{
     try {
+      if (barcode == "MANUAL_ENTRY" || barcode == "No Barcode") {
+        print("⚠️ Cannot favorite a manual-entry or no-barcode item.");
+        return;       // ← just bail out
+      }
       String? petID = await getCurrentPetID();
       if (petID == null) {
         print("❌ Cannot log meal - Pet not found!");

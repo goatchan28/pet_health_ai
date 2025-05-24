@@ -1,6 +1,9 @@
+import 'dart:math';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:pet_health_ai/models/pet.dart';
+import 'package:pet_health_ai/pages/progress_page.dart';
 
 class WeeklyNutrientGraph extends StatefulWidget {
   final double width;
@@ -50,11 +53,46 @@ class _WeeklyNutrientGraphState extends State<WeeklyNutrientGraph> {
   List<double> extractMacros(String day) {
     final nutrients = widget.pet.weeklyNutrients?[day] ?? {};
     return [
-      nutrients["Carbohydrates"].toDouble() ?? 0.0, // Carbohydrates
-      nutrients["Crude Protein"].toDouble()?? 0.0, // Protein
+      nutrients["Crude Protein"].toDouble() ?? 0.0, // Carbohydrates
+      nutrients["Carbohydrates"].toDouble()?? 0.0, // Protein
       nutrients["Crude Fat"].toDouble() ?? 0.0,     // Fat
     ];
   }
+
+  double _getNiceInterval(double value) {
+    final roughInterval = (value / 5).ceilToDouble(); // Aim for ~5 steps
+    // Round to nearest 50/100
+    if (roughInterval <= 50) return 50;
+    if (roughInterval <= 100) return 100;
+    if (roughInterval <= 200) return 200;
+    if (roughInterval <= 300) return 300;
+    return 400;
+  }
+
+
+  double _getRoundedMax(double value) {
+    final interval = _getNiceInterval(value);
+    final target = value * 1.1; // Add 10% buffer
+    return (target / interval).ceil() * interval;
+  }
+
+  Widget _legendItem(Color color, String label) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(color: Colors.white, fontSize: 12)),
+      ],
+    );
+  }
+
 
   Widget bottomTitles(double value, TitleMeta meta) {
     const style = TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold);
@@ -114,7 +152,7 @@ class _WeeklyNutrientGraphState extends State<WeeklyNutrientGraph> {
           toY: calories,
           width: barWidth,
           borderRadius: BorderRadius.circular(8),
-          color: Colors.blue,
+          color: Colors.red[500],
         ),
       ],
     );
@@ -126,7 +164,7 @@ class _WeeklyNutrientGraphState extends State<WeeklyNutrientGraph> {
       barRods: [
         BarChartRodData(toY: protein, width: 8, color: Colors.green),
         BarChartRodData(toY: carbs, width: 8, color: Colors.yellow),
-        BarChartRodData(toY: fats, width: 8, color: Colors.pink),
+        BarChartRodData(toY: fats, width: 8, color: const Color.fromARGB(255, 228, 115, 153)),
       ],
     );
   }
@@ -134,6 +172,16 @@ class _WeeklyNutrientGraphState extends State<WeeklyNutrientGraph> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final double actualMax = showCalories
+      ? weeklyCalorieIntake.values.reduce((a, b) => a > b ? a : b)
+      : macroIntake.values.map((v) => v[0]).reduce((a, b) => a > b ? a : b);
+
+    final double requirement = showCalories
+      ? widget.pet.calorieRequirement.toDouble()
+      : widget.pet.nutritionalRequirements["Carbohydrates"]?.toDouble() ?? 0;
+
+    final double yMax = _getRoundedMax(max(actualMax, requirement));
+    final double yInterval = _getNiceInterval(yMax);
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: Container(
@@ -141,6 +189,20 @@ class _WeeklyNutrientGraphState extends State<WeeklyNutrientGraph> {
         padding: const EdgeInsets.all(8),
         child: Column(
           children: [
+            Padding(
+              padding: const EdgeInsets.only(top:5),
+              child: Align(
+                alignment: Alignment.center,
+                child: Text(
+                  showCalories ? 'Weekly Calorie Intake' : 'Weekly Macronutrient Intake',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
             Align(
               alignment: Alignment.topLeft,
               child: IconButton(
@@ -152,15 +214,14 @@ class _WeeklyNutrientGraphState extends State<WeeklyNutrientGraph> {
                 },
               ),
             ),
+            SizedBox(height:10),
             SizedBox(
               width: widget.width,
-              height: widget.height - 50,
+              height: widget.height - 50,           
               child: BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.center,
-                  maxY: showCalories 
-                    ? ((widget.pet.calorieRequirement / 100).round() * 100) + 100 
-                    : (((widget.pet.nutritionalRequirements["Carbohydrates"] ?? 0) / 100).round() * 100) + 100,
+                  maxY: yMax,
                   minY: 0,
                   groupsSpace: barSpacing,
                   titlesData: FlTitlesData(
@@ -175,7 +236,7 @@ class _WeeklyNutrientGraphState extends State<WeeklyNutrientGraph> {
                       sideTitles: SideTitles(
                         showTitles: true,
                         getTitlesWidget: leftTitles,
-                        interval: showCalories ? 100 : 20,
+                        interval: yInterval,
                         reservedSize: 38,
                       ),
                     ),
@@ -186,6 +247,7 @@ class _WeeklyNutrientGraphState extends State<WeeklyNutrientGraph> {
                     show: true,
                     drawVerticalLine: false,
                     checkToShowHorizontalLine: (value) => true,
+                    horizontalInterval: yInterval,
                     getDrawingHorizontalLine: (value) {
                       return FlLine(
                         color: Colors.grey,
@@ -205,9 +267,50 @@ class _WeeklyNutrientGraphState extends State<WeeklyNutrientGraph> {
                   barGroups: showCalories
                       ? weeklyCalorieIntake.entries.map((e) => generateCaloriesGroup(e.key, e.value)).toList()
                       : macroIntake.entries.map((e) => generateMacrosGroup(e.key, e.value[0], e.value[1], e.value[2])).toList(),
+                  extraLinesData: ExtraLinesData(horizontalLines: [
+                  if (showCalories)
+                    HorizontalLine(
+                      y: widget.pet.calorieRequirement.toDouble(),
+                      color: Colors.red[500],
+                      strokeWidth: 2,
+                      dashArray: [5, 5],
+                    )
+                  else ...[
+                    HorizontalLine(
+                      y: widget.pet.nutritionalRequirements["Crude Protein"]?.toDouble() ?? 0,
+                      color: Colors.green,
+                      strokeWidth: 2,
+                      dashArray: [5, 5],
+                    ),
+                    HorizontalLine(
+                      y: widget.pet.nutritionalRequirements["Carbohydrates"]?.toDouble() ?? 0,
+                      color: Colors.yellow,
+                      strokeWidth: 2,
+                      dashArray: [5, 5],
+                    ),
+                    HorizontalLine(
+                      y: widget.pet.nutritionalRequirements["Crude Fat"]?.toDouble() ?? 0,
+                      color: Color.fromARGB(255, 228, 115, 153),
+                      strokeWidth: 2,
+                      dashArray: [5, 5],
+                    ),
+                  ],
+                ]),
                 ),
               ),
             ),
+            if (!showCalories)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _legendItem(Colors.green, 'Protein'),
+                    _legendItem(Colors.yellow, 'Carbs'),
+                    _legendItem(Colors.pink, 'Fats'),
+                  ],
+                ),
+              )
           ],
         ),
       ),
@@ -228,6 +331,22 @@ class _LineChart extends StatefulWidget {
 class _LineChartState extends State<_LineChart> {
   List<Map<String, dynamic>> filteredStats = [];
 
+  double getDynamicMaxY() {
+    final allValues = [
+      ...filteredStats.where((e) => e["weight"] != null).map((e) => (e["weight"] as num).toDouble()),
+      ...filteredStats.where((e) => e["height"] != null).map((e) => (e["height"] as num).toDouble()),
+      ...filteredStats.where((e) => e["bcs"] != null).map((e) => (e["bcs"] as num).toDouble()),
+    ];
+
+    if (allValues.isEmpty) return 40;
+
+    final maxVal = allValues.reduce((a, b) => a > b ? a : b);
+    final padded = maxVal * 1.1;
+
+    // Round up to next multiple of 5 for clean Y-axis
+    return (padded / 5).ceil() * 5;
+  }
+
   @override
   Widget build(BuildContext context) {
     return LineChart(
@@ -243,6 +362,7 @@ class _LineChartState extends State<_LineChart> {
       return dateA.compareTo(dateB);
     });
   }
+  
 
   DateTime parseDate(String date) {
     List<String> parts = date.split('-');
@@ -262,13 +382,15 @@ class _LineChartState extends State<_LineChart> {
   }
 
   LineChartData get sampleData1 {
-    DateTime now = DateTime.now();
-    DateTime cutoffDate = now.subtract(Duration(days: widget.filterMonths * 30)); // ✅ Correct date range
+    DateTime? cutoffDate = widget.filterMonths == -1
+      ? null
+      : DateTime.now().subtract(Duration(days: widget.filterMonths * 30));
+
 
     // ✅ Filter to only include entries within the selected time frame
     filteredStats = sortedVetStats
-        .where((entry) => parseDate(entry["date"]).isAfter(cutoffDate))
-        .toList();
+      .where((entry) => cutoffDate == null || parseDate(entry["date"]).isAfter(cutoffDate))
+      .toList();
     print(filteredStats);
 
     if (filteredStats.isEmpty) {
@@ -300,18 +422,39 @@ class _LineChartState extends State<_LineChart> {
       lineBarsData: lineBarsData1,
       minX: 0,  // ✅ Prevents ArgumentError (ensures valid range)
       maxX: maxX,
-      maxY: 40,
+      maxY: getDynamicMaxY(),
       minY: 0,
     );
   }
 
   LineTouchData get lineTouchData1 => LineTouchData(
-        handleBuiltInTouches: true,
-        touchTooltipData: LineTouchTooltipData(
-          getTooltipColor: (touchedSpot) =>
-              Colors.blueGrey.withValues(alpha: 0.8),
-        ),
-      );
+    handleBuiltInTouches: true,
+    touchTooltipData: LineTouchTooltipData(
+      fitInsideHorizontally: true,
+      fitInsideVertically: true,
+      tooltipMargin: 10,
+      tooltipRoundedRadius: 8,
+      getTooltipItems: (touchedSpots) {
+        return touchedSpots.map((spot) {
+          final label = spot.bar.color == const Color.fromARGB(255, 244, 166, 56)
+              ? 'Weight'
+              : spot.bar.color == const Color.fromARGB(255, 158, 92, 188)
+                  ? 'Height'
+                  : 'BCS';
+
+          return LineTooltipItem(
+            '$label: ${spot.y.toStringAsFixed(1)}',
+            const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          );
+        }).toList();
+      },
+    ),
+  );
+
 
   FlTitlesData get titlesData1 => FlTitlesData(
         bottomTitles: AxisTitles(
@@ -375,8 +518,20 @@ SideTitles leftTitles() => SideTitles(
     int index = value.toInt();
     if (index < 0 || index >= filteredStats.length) return Container();
 
+    if (filteredStats.length > 10 && index % 2 != 0) return Container();
+
     DateTime date = parseDate(filteredStats[index]["date"]);
-    String formattedDate = "${date.month}/${date.day}"; // ✅ MM/DD format
+    String formattedDate;
+    final bool isAllTime = widget.filterMonths == -1;
+    final bool isCrossYear = filteredStats.any((entry) {
+      return parseDate(entry["date"]).year != DateTime.now().year;
+    });
+
+    if (isAllTime || isCrossYear) {
+      formattedDate = "${date.month}/${date.day}/${date.year % 100}";
+    } else {
+      formattedDate = "${date.month}/${date.day}";
+    }
 
     return SideTitleWidget(
       meta: meta,
@@ -390,11 +545,12 @@ SideTitles leftTitles() => SideTitles(
   }
 
   SideTitles get bottomTitles => SideTitles(
-        showTitles: true,
-        getTitlesWidget: bottomTitleWidgets,
-        interval: 30 * 24 * 60 * 60 * 1000.0, // Approx. 1 month in milliseconds
-        reservedSize: 24,
-      );
+    showTitles: true,
+    getTitlesWidget: bottomTitleWidgets,
+    reservedSize: 24,
+    interval: 1, // ✅ Force label check every index
+  );
+
 
   FlGridData get gridData => const FlGridData(show: false);
 
@@ -412,7 +568,7 @@ SideTitles leftTitles() => SideTitles(
   /// ✅ Weight Data (sorted by date)
   LineChartBarData get weightData => LineChartBarData(
   isCurved: false,
-  color: Colors.green,
+  color: const Color.fromARGB(255, 244, 166, 56),
   barWidth: 4,
   isStrokeCapRound: true,
   dotData: const FlDotData(show: true),
@@ -429,7 +585,7 @@ SideTitles leftTitles() => SideTitles(
   /// ✅ Height Data (sorted by date)
   LineChartBarData get heightData => LineChartBarData(
     isCurved: false,
-    color: Colors.pink,
+    color: Color.fromARGB(255, 158, 92, 188),
     barWidth: 4,
     isStrokeCapRound: true,
     dotData: const FlDotData(show: true),
@@ -461,17 +617,17 @@ SideTitles leftTitles() => SideTitles(
   );
 }
 
-class LineChartSample1 extends StatefulWidget {
+class VetVistsChart extends StatefulWidget {
   final double width;
   final double height;
   final Pet pet;
-  const LineChartSample1({super.key, required this.width, required this.height, required this.pet});
+  const VetVistsChart({super.key, required this.width, required this.height, required this.pet});
 
   @override
-  State<StatefulWidget> createState() => LineChartSample1State();
+  State<StatefulWidget> createState() => VetVistsChartState();
 }
 
-class LineChartSample1State extends State<LineChartSample1> {
+class VetVistsChartState extends State<VetVistsChart> {
   int filterMonths = 12;
   @override
   void initState() {
@@ -486,9 +642,9 @@ class LineChartSample1State extends State<LineChartSample1> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            filterButton("1M", 1),
             filterButton("6M", 6),
             filterButton("12M", 12),
+            filterButton("All", -1)
           ],),
         SizedBox(height:10),
         ClipRRect(
@@ -496,46 +652,52 @@ class LineChartSample1State extends State<LineChartSample1> {
           child: Container(
             color: theme.colorScheme.primary, // Background color of the graph
             padding: const EdgeInsets.all(8),
-            child: SizedBox(
-              width: widget.width,
-              height: widget.height,
-              child: AspectRatio(
-                aspectRatio: 1.23,
-                child: Stack(
-                  children: <Widget>[
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        const SizedBox(
-                          height: 37,
-                        ),
-                        const Text(
-                          'Vet Visits',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 2,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(
-                          height: 37,
-                        ),
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.only(right: 16, left: 6),
-                            child: _LineChart(widget.pet, filterMonths),
-                          ),
-                        ),
-                        const SizedBox(
-                          height: 10,
-                        ),
-                      ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 5),
+                  child: Text(
+                    'Vet Visits',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
                     ),
-                  ],
+                    textAlign: TextAlign.center,
+                  ),
                 ),
-              ),
+                const SizedBox(
+                  height: 10,
+                ),
+                SizedBox(
+                  height: widget.height,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 16, left: 6),
+                    child: _LineChart(widget.pet, filterMonths),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _legendItem(Color.fromARGB(255, 244, 166, 56), 'Weight'),
+                          _legendItem(Color.fromARGB(255, 158, 92, 188), 'Height'),
+                          _legendItem(Colors.cyan, 'BCS'),
+                        ],
+                      ),
+                      const SizedBox(height: 30),
+                      ElevatedButton(
+                        onPressed: () => showVetVisitDialog(context, widget.pet),
+                        child: const Text("Record Vet Visit"),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -558,4 +720,25 @@ class LineChartSample1State extends State<LineChartSample1> {
       ),
     );
   }
+  Widget _legendItem(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white, fontSize: 12),
+        ),
+      ],
+    );
+  }
 }
+

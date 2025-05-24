@@ -17,12 +17,14 @@ class MyAppState extends ChangeNotifier {
   bool barcodeNotFound = false;
   String name = "Guest";
   bool needsToEnterName = false;
-  final Pet defaultPet = Pet(name: "Buddy", breed: "Golden Retriever", weight: 29, age: 6, neutered_spayed: false);
+  final Pet defaultPet = Pet(id: "default", name: "Buddy", breed: "Golden Retriever", weight: 29, age: 6, neutered_spayed: false);
   late SharedPreferencesWithCache prefs;
   bool hasLoadedData = false;
   List<Pet> pets = [];
   String? profileImageUrl;
   String? memberSince;
+  bool   startWithManualCamera = false;   // NEW
+  String? manualCameraBarcode;            // NEW
   
   MyAppState() {
     pets = [defaultPet];
@@ -218,7 +220,7 @@ class MyAppState extends ChangeNotifier {
       return;
     }
 
-    pets = snap.docs.map((d) => Pet.fromJson(d.data())).toList();
+    pets = snap.docs.map((d) => Pet.fromJson(d.data(), d.id)).toList();
     await updateLocalPetData();
     notifyListeners();
   }
@@ -270,7 +272,12 @@ class MyAppState extends ChangeNotifier {
     if (petsData != null && petsData.isNotEmpty) {
       try {
         List<dynamic> decodedPets = jsonDecode(petsData);
-        List<Pet> loadedPets = decodedPets.map((pet) => Pet.fromJson(pet)).toList();
+        List<Pet> loadedPets = decodedPets.asMap().entries.map((entry) {
+          final index = entry.key;
+          final data = entry.value as Map<String, dynamic>;
+          final id = data['id'] ?? 'local-pet-$index'; // fallback if no ID saved
+          return Pet.fromJson(data, id);
+        }).toList();
         if (loadedPets != pets) { // Only update if pets actually changed
           pets = loadedPets;
           notifyListeners(); // 🔄 Only update UI if necessary
@@ -420,36 +427,76 @@ class MyAppState extends ChangeNotifier {
   }
 
   Future<void> addPetID(String desiredPetID) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid!= null){
-      try {
-        final docRef = FirebaseFirestore.instance.collection("pets").doc(desiredPetID);
-        final docSnapshot = await docRef.get();
+    try {
+      await FirebaseAuth.instance.currentUser?.reload();
 
-        // Check if the document exists
-        if (docSnapshot.exists) {
-          List<dynamic> ownerUIDs = docSnapshot.data()?["ownerUID"] ?? [];
-          // If the document exists, update the ownerUID array
-          if (!ownerUIDs.contains(uid)) {
-            // If the uid is not already in the ownerUID array, add it
-            await docRef.update({
-              "ownerUID": FieldValue.arrayUnion([uid]),
-            });
-            print("✅ Owner UID added successfully to pet $desiredPetID");
-          } else {
-            print("❌ Owner UID is already in the list.");
-          }
+      final user = FirebaseAuth.instance.currentUser;
+      final uid = user?.uid;
+
+      if (uid == null) {
+        print("❌ No authenticated user found.");
+        return;
+      }
+      
+      final docRef = FirebaseFirestore.instance.collection("pets").doc(desiredPetID);
+      final docSnapshot = await docRef.get();
+
+      // Check if the document exists
+      if (docSnapshot.exists) {
+        List<dynamic> ownerUIDs = docSnapshot.data()?["ownerUID"] ?? [];
+        // If the document exists, update the ownerUID array
+        if (!ownerUIDs.contains(uid)) {
+          // If the uid is not already in the ownerUID array, add it
+          await docRef.update({
+            "ownerUID": FieldValue.arrayUnion([uid]),
+          });
+          print("✅ Owner UID added successfully to pet $desiredPetID");
         } else {
-          print("❌ Document with ID $desiredPetID does not exist.");
+          print("❌ Owner UID is already in the list.");
         }
-        await getPets(true);
-        notifyListeners();
+      } else {
+        print("❌ Document with ID $desiredPetID does not exist.");
       }
-      catch(e){
-        print("❌ Error adding owner UID to pet $desiredPetID: $e");
-      }
+      await getPets(true);
+      notifyListeners();
+    }
+    catch(e){
+      print("❌ Error adding owner UID to pet $desiredPetID: $e");
     }
   }
+
+  Future<void> removePet(Pet pet) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final docRef = FirebaseFirestore.instance.collection('pets').doc(pet.id);
+
+    final docSnapshot = await docRef.get();
+    if (!docSnapshot.exists) {
+      print("❌ Pet document not found for ID: ${pet.id}");
+      return;
+    }
+
+    List<dynamic> ownerUIDs = docSnapshot.data()?["ownerUID"] ?? [];
+
+    if (ownerUIDs.contains(uid)) {
+      await docRef.update({
+        "ownerUID": FieldValue.arrayRemove([uid]),
+      });
+
+      print("✅ Removed UID $uid from pet ${pet.id}");
+
+      pets.removeWhere((p) => p.id == pet.id);
+
+      if (pets.isEmpty) {
+        pets = [defaultPet];
+      }
+
+      await updateLocalPetData();
+      notifyListeners();
+    }
+  }
+
 
   void selectPet(int index) {
     if (index >= 0 && index < pets.length) {
@@ -458,8 +505,8 @@ class MyAppState extends ChangeNotifier {
     }
   }
 
-  void updatePetIntake(Pet pet, Map<String, double> updatedValues, String barcode, String amount) {
-    pet.addFood(updatedValues, barcode, amount, this);
+  void updatePetIntake(Pet pet, Map<String, double> updatedValues, String barcode, String productName, String amount) {
+    pet.addFood(updatedValues, barcode, productName, amount, this);
     scannedFoodData = {}; // Update the pet's intake
     notifyListeners(); // Notify UI about changes
   }
@@ -476,7 +523,12 @@ class MyAppState extends ChangeNotifier {
 
       if (petsData != null && petsData.isNotEmpty && !petAdded) {
         List<dynamic> decodedPets = jsonDecode(petsData);
-        pets = decodedPets.map((pet) => Pet.fromJson(pet)).toList();
+        pets = decodedPets.asMap().entries.map((entry) {
+          final index = entry.key;
+          final data = entry.value as Map<String, dynamic>;
+          final id = data['id'] ?? 'local-pet-$index';
+          return Pet.fromJson(data, id);
+        }).toList();
         print("Pets loaded from SharedPreferences");
         notifyListeners();
         return;
@@ -491,12 +543,7 @@ class MyAppState extends ChangeNotifier {
         print(FirebaseAuth.instance.currentUser?.displayName);
 
         if (snapshot.docs.isNotEmpty){
-          pets = snapshot.docs.map((doc) {
-            final data = doc.data();
-
-            // Create a Pet object for each document
-            return Pet.fromJson(data);
-          }).toList();
+          pets = snapshot.docs.map((doc) => Pet.fromJson(doc.data(), doc.id)).toList();
           await prefs.setString("pets", jsonEncode(pets.map((pet) => pet.toJson()).toList()));
           notifyListeners();
         }
@@ -792,7 +839,7 @@ void printSharedPreferences() {
         Map<String, double> newNutrients = {};
 
           scannedFoodData['nutritionalInfo'].forEach((key, value) {
-            newNutrients[key] = (value * amount * conversionRate) / 100; // ✅ Scale nutrients based on amount
+            newNutrients[key] = ((value * amount * conversionRate) / 100).roundToDouble(); // ✅ Scale nutrients based on amount
           });
           
         finalData = {
@@ -813,16 +860,18 @@ void printSharedPreferences() {
           final m = scannedFoodData['guaranteedAnalysis']['Moisture'] as num;
           if (m >= 0 && m <= 100)  moistureContent = m.toDouble();
           double dryMatterPercent = 100 - moistureContent;  // Dry matter is the complement of moisture content
-          
+          double dryMatterWeight  =                                  // ← NEW
+            amount * conversionRate * dryMatterPercent / 100;
           // Adjust the nutrient percentages based on the dry matter percentage
           scannedFoodData['guaranteedAnalysis'].forEach((key, value) {
+            if (key == 'Moisture') return;
             double adjustedPercentage = value / dryMatterPercent * 100;  // Adjust nutrient based on dry matter
-            newNutrients[key] = (adjustedPercentage * amount * conversionRate) / 100;  // Calculate actual grams for the given amount
+            newNutrients[key] = ((adjustedPercentage * dryMatterWeight) / 100).roundToDouble();  // Calculate actual grams for the given amount
           });
         }
         else{
           scannedFoodData['guaranteedAnalysis'].forEach((key, value) {
-            newNutrients[key] = (value * amount * conversionRate) / 100;  // Scale nutrients based on amount
+            newNutrients[key] = ((value * amount * conversionRate) / 100).roundToDouble();  // Scale nutrients based on amount
           });
         }
         if (scannedFoodData.containsKey('caloriesPer100g') 
@@ -962,4 +1011,10 @@ void printSharedPreferences() {
         notifyListeners();
       }
     }
-}
+
+    void startManualPhotoFlow(String barcode) {
+      manualCameraBarcode = barcode;
+      startWithManualCamera = true;
+      changeIndex(2);                       // switch to Camera tab
+    }
+  }

@@ -114,7 +114,13 @@ class RecommendedFoodView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: const Center(child: Text("Recommended Foods Section in Progress"))
+      body: const Center(
+        child: Text(
+          "Recommended Foods Section in Progress", 
+          style: TextStyle(fontSize: 36),
+          textAlign: TextAlign.center,
+        )
+      )
     );
   }
 }
