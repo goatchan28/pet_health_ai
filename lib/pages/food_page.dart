@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:pet_health_ai/main.dart';
 import 'package:pet_health_ai/models/app_state.dart';
 import 'package:pet_health_ai/pages/home_page.dart';
 import 'package:provider/provider.dart';
 
+void _showOfflineMsg(BuildContext ctx) =>
+  ScaffoldMessenger.of(ctx).showSnackBar(
+    const SnackBar(
+      content: Text('Connect to the internet to make changes.'),
+    ),
+  );
 
 class FoodPage extends StatelessWidget {
   const FoodPage({super.key});
@@ -69,19 +76,21 @@ class FavoriteItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final online = context.read<ConnectivityService>().isOnline;
+    
     String productName = food["productName"] ?? "Unknown Product";
     String brandName = food["brandName"] ?? "Unknown Brand";
     String barcode = food["barcode"] ?? "N/A";
     String imageUrl = food["frontImage"] ?? ""; // If you plan to store images\
 
     return GestureDetector(
-      onTap: (){
+      onTap: online ? (){
         showFeedDialog(context, appState.selectedPet, selectedProductName: productName);
-      },
+      } : () => _showOfflineMsg(context),
       child: Card(
         margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
         child: ListTile(
-          leading: imageUrl.isNotEmpty
+          leading: imageUrl.isNotEmpty && online
               ? Image.network(imageUrl, width: 55, height: 105, fit: BoxFit.cover)
               : const Icon(Icons.rice_bowl, size: 55, color: Colors.grey), // Placeholder image,
           isThreeLine: true,

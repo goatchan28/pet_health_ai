@@ -1,4 +1,6 @@
 import 'package:camera/camera.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +22,8 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  FirebaseFirestore.instance.settings =
+    const Settings(persistenceEnabled: true);   // ← NEW
   // Get a list of available cameras
   final cameras = await availableCameras();
   if (cameras.isEmpty) {
@@ -29,27 +33,102 @@ void main() async {
 
   final appState = MyAppState();
   await appState.init();
-  runApp(MyApp(appState: appState, camera: firstCamera));
+  runApp(MultiProvider(
+    providers: [
+      ChangeNotifierProvider(create: (_) => ConnectivityService()),
+      ChangeNotifierProvider.value(value: appState),
+    ],
+    child: MyApp(camera: firstCamera)));
 }
 
+class ConnectivityService with ChangeNotifier {
+  ConnectivityResult _status = ConnectivityResult.none;
+
+  ConnectivityService() {
+    Connectivity().onConnectivityChanged.listen((results) {
+      // `results` is a List<ConnectivityResult>
+      _status = results.contains(ConnectivityResult.wifi) ||
+                results.contains(ConnectivityResult.mobile)
+          ? ConnectivityResult.wifi   // any online type → treat as online
+          : ConnectivityResult.none;  // otherwise offline
+
+      notifyListeners();
+    });
+  }
+
+  bool get isOnline => _status != ConnectivityResult.none;
+}
+
+class SplashGate extends StatelessWidget {
+  final Widget child;
+  const SplashGate({required this.child, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final online     = context.watch<ConnectivityService>().isOnline;
+    final signedIn   = FirebaseAuth.instance.currentUser != null;
+
+    if (!online && !signedIn) {
+      return const Scaffold(
+        body: Center(
+          child: Text(
+            'No Internet connection.\nConnect to sign in the first time.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 18),
+          ),
+        ),
+      );
+    }
+    return child;
+  }
+}
+
+class ConnectivityBanner extends StatelessWidget {
+  final Widget child;
+  const ConnectivityBanner({required this.child, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final online = context.watch<ConnectivityService>().isOnline;
+    return Stack(
+      children: [
+        child,
+        if (!online)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Container(
+                color: Colors.black45,
+                alignment: Alignment.center,
+                child: const Text(
+                  '⚠️  Offline - you can navigate, but changes disabled',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+
 class MyApp extends StatelessWidget {
-  final MyAppState appState;
   final CameraDescription? camera;
-  const MyApp({super.key, required this.appState, required this.camera});
+  const MyApp({super.key, required this.camera});
 
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider.value(
-      value: appState,
-      child: MaterialApp(
-          title: 'Pet Health AI',
-          theme: ThemeData(
-            useMaterial3: true,
-            colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromRGBO(152, 171, 218, 1)),
-            scaffoldBackgroundColor: Color.fromRGBO(215,215,215,1),
-          ),
-        home: StreamBuilder(
+    return MaterialApp(
+        title: 'Pet Health AI',
+        theme: ThemeData(
+          useMaterial3: true,
+          colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromRGBO(152, 171, 218, 1)),
+          scaffoldBackgroundColor: Color.fromRGBO(215,215,215,1),
+        ),
+      home: SplashGate(
+        child: StreamBuilder(
           stream: FirebaseAuth.instance.authStateChanges(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting){
@@ -68,8 +147,8 @@ class MyApp extends StatelessWidget {
               return EnterAccountPage();
             }
           }
-        )
-      ),
+        ),
+      )
     );
   } 
 }
@@ -96,8 +175,10 @@ class _MyHomePageState extends State<MyHomePage> {
     switch(appState.currentPageIndex){
       case 0:
         page = HomePage(pet: selectedPet);
+        break;
       case 1:
         page = ProgressTrackerPage(pet: selectedPet);
+        break;
       case 2:
         if (widget.camera == null) {
           page = const Center(
@@ -111,45 +192,50 @@ class _MyHomePageState extends State<MyHomePage> {
           appState.startWithManualCamera = false;
           appState.manualCameraBarcode   = null;
         }
+        break;
       case 3:
         page = const FoodPage();
+        break;
       case 4:
         page = const ProfilePage();
+        break;
       default:
         throw UnimplementedError('No widget for selectedIndex: ${appState.currentPageIndex}');
     }
-    return Scaffold(
-      body: Container(
-        color: Theme.of(context).colorScheme.primary,
-        child: page,
-      ),
-      bottomNavigationBar: NavigationBar(
-        destinations: [
-          NavigationDestination(
-            icon: Image.asset("assets/images/sigmalogo.png", width: 88, height: 88, fit: BoxFit.cover,), 
-            label: '',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.track_changes), 
-            label: 'Progress',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.camera), 
-            label: 'Camera',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.rice_bowl), 
-            label: 'Food',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person), 
-            label: 'Profile',
-          ),
-        ],
-        selectedIndex: appState.currentPageIndex, 
-        onDestinationSelected: (value){
-            appState.changeIndex(value);
-        },
+    return ConnectivityBanner(
+      child: Scaffold(
+        body: Container(
+          color: Theme.of(context).colorScheme.primary,
+          child: page,
+        ),
+        bottomNavigationBar: NavigationBar(
+          destinations: [
+            NavigationDestination(
+              icon: Image.asset("assets/images/sigmalogo.png", width: 88, height: 88, fit: BoxFit.cover,), 
+              label: '',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.track_changes), 
+              label: 'Progress',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.camera), 
+              label: 'Camera',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.rice_bowl), 
+              label: 'Food',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person), 
+              label: 'Profile',
+            ),
+          ],
+          selectedIndex: appState.currentPageIndex, 
+          onDestinationSelected: (value){
+              appState.changeIndex(value);
+          },
+        ),
       ),
     );
   }

@@ -3,10 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:pet_health_ai/main.dart';
 import 'package:provider/provider.dart';
 import 'package:pet_health_ai/models/app_state.dart';
 import 'package:pet_health_ai/models/pet.dart';
 import 'package:pet_health_ai/extras/settings_page.dart';
+
+void _showOfflineMsg(BuildContext ctx) =>
+  ScaffoldMessenger.of(ctx).showSnackBar(
+    const SnackBar(
+      content: Text('Connect to the internet to make changes.'),
+    ),
+  );
+
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -14,6 +23,8 @@ class ProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var appState = context.watch<MyAppState>();
+    final online = context.read<ConnectivityService>().isOnline;
+    final bool showPhoto = online && appState.profileImageUrl != null;
 
     return Scaffold(
       body: Padding(
@@ -29,19 +40,25 @@ class ProfilePage extends StatelessWidget {
                         CircleAvatar(
                           radius: 40,
                           backgroundColor: Colors.green,
-                          foregroundImage: (appState.profileImageUrl != null)
+                          foregroundImage: showPhoto
                               ? NetworkImage(appState.profileImageUrl!)
                               : null,
-                          child: Text(
-                            appState.name.isNotEmpty ? appState.name[0].toUpperCase() : "?",
-                            style: const TextStyle(fontSize: 30, color: Colors.white),
-                          ),
+                          child: showPhoto 
+                            ? null  
+                            : Text(
+                              appState.name.isNotEmpty ? appState.name[0].toUpperCase() : "?",
+                              style: const TextStyle(fontSize: 30, color: Colors.white),
+                            ),
                         ),
                         Positioned(
                           bottom: 0,
                           right: 0,
                           child: GestureDetector(
                             onTap: () async {
+                              if (!context.read<ConnectivityService>().isOnline) {
+                                _showOfflineMsg(context);
+                                return;
+                              }
                               final picker = ImagePicker();
                               final picked = await picker.pickImage(source: ImageSource.gallery);
                               if (picked == null) return;
@@ -140,14 +157,25 @@ class ProfilePage extends StatelessWidget {
                 leading: Icon(Icons.settings),
                 title: Text('Settings'),
                 trailing: Icon(Icons.chevron_right),
-                onTap: () {
+                onTap: online ? () {
+                  if (!context.read<ConnectivityService>().isOnline) {
+                    _showOfflineMsg(context);              // just show the toast
+                    return;                                // ← stop here when offline
+                  }
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const SettingsPage()),
                   );
-                },
+                } : () => _showOfflineMsg(context),
               ),
               ElevatedButton(
-                onPressed: () {appState.signOut();}, 
+                onPressed: () {
+                  final onlineNow = context.read<ConnectivityService>().isOnline;
+                  if (!onlineNow) {
+                    _showOfflineMsg(context);
+                    return;
+                  }
+                  appState.signOut();
+                }, 
                 child: Text('Log Out', style: TextStyle(fontSize: 16))
               )
             ],
@@ -159,6 +187,11 @@ class ProfilePage extends StatelessWidget {
 
 Future<void> showAddPetDialog(BuildContext context) async {
   var appState = context.read<MyAppState>();
+  final online   = context.read<ConnectivityService>().isOnline;
+  if (!online) {                 // early exit
+    _showOfflineMsg(context);
+    return;
+  }
 
   int mode = 0;
 
@@ -321,6 +354,10 @@ Future<void> showAddPetDialog(BuildContext context) async {
               ),
               ElevatedButton(
                 onPressed: () {
+                  if (!context.read<ConnectivityService>().isOnline) {
+                    _showOfflineMsg(context);
+                    return;
+                  }
                   if (mode==0){
                     desiredPetID = petIDController.text.trim();
                     if (desiredPetID.isEmpty){
@@ -405,6 +442,11 @@ class _EditPetDialogState extends State<EditPetDialog> {
   }
 
   Future<void> _removePet() async {
+    final online = context.read<ConnectivityService>().isOnline;
+    if (!online) {
+      _showOfflineMsg(context);
+      return;
+    }
     final appState = context.read<MyAppState>();
     await appState.removePet(widget.pet);
     if (!context.mounted) return;
@@ -414,6 +456,8 @@ class _EditPetDialogState extends State<EditPetDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final online = context.read<ConnectivityService>().isOnline;
+    final bool showNetImage = online && widget.pet.imageUrl != null;
     return AlertDialog(
       title: const Text('Edit Pet'),
       content: SingleChildScrollView(
@@ -449,15 +493,17 @@ class _EditPetDialogState extends State<EditPetDialog> {
                   radius: 40,
                   backgroundImage: newImageFile != null
                       ? FileImage(newImageFile!)
-                      : widget.pet.imageUrl != null
+                      : showNetImage
                           ? NetworkImage(widget.pet.imageUrl!)
-                          : const AssetImage("assets/images/sigmalogo.png"),
+                          : const AssetImage("assets/images/sigmalogo.png") as ImageProvider,
                 ),
               ),
             TextButton.icon(
               icon: const Icon(Icons.image),
               label: const Text("Change Profile Picture"),
               onPressed: () async {
+                final onlineNow = context.read<ConnectivityService>().isOnline;
+                if (!onlineNow) { _showOfflineMsg(context); return; }
                 final picker = ImagePicker();
                 final picked = await picker.pickImage(source: ImageSource.gallery);
                 if (picked == null) return;
@@ -492,14 +538,12 @@ class _EditPetDialogState extends State<EditPetDialog> {
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: _saveChanges,
+          onPressed: online ? _saveChanges : () => _showOfflineMsg(context),
           child: const Text('Save'),
         ),
       ],
     );
   }
-
-
 }
 
 class PetProfileCard extends StatelessWidget {
@@ -514,7 +558,8 @@ class PetProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool showImage = pet.imageUrl != null;
+    final bool online      = context.watch<ConnectivityService>().isOnline;
+    final bool hasPhotoUrl = pet.imageUrl != null && online;
 
     return GestureDetector(
       onTap: onTap, // This will handle taps to show more details
@@ -530,16 +575,15 @@ class PetProfileCard extends StatelessWidget {
             CircleAvatar(
               radius: 30,
               backgroundColor: Colors.grey[300],
-              foregroundImage: showImage
-                  ? NetworkImage(pet.imageUrl!)
+              foregroundImage: hasPhotoUrl ? NetworkImage(pet.imageUrl!) : null,
+              child: !hasPhotoUrl
+                  ? Image.asset(
+                      'assets/images/sigmalogo.png',
+                      width: 60,
+                      height: 60,
+                      fit: BoxFit.contain,
+                    )
                   : null,
-              child: Center(
-                child: SizedBox(
-                  width: 60,
-                  height: 60,
-                  child: Image.asset("assets/images/sigmalogo.png", fit: BoxFit.contain),
-                ),
-              )
             ),
             const SizedBox(width: 12),
             Expanded(

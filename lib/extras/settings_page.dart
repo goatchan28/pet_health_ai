@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pet_health_ai/main.dart';
 import 'package:pet_health_ai/models/app_state.dart';
 import 'package:provider/provider.dart';
 
@@ -9,7 +10,12 @@ class SettingsPage extends StatelessWidget{
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<MyAppState>();
+    final isOnline = context.watch<ConnectivityService>().isOnline;
 
+    void offlineToast() => ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Connect to the internet to make changes.')),
+    );
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
@@ -19,7 +25,12 @@ class SettingsPage extends StatelessWidget{
           ListTile(
             leading: const Icon(Icons.person),
             title: const Text('Change Display Name'),
+            enabled: isOnline,
             onTap: () {
+              if (!isOnline) {
+                offlineToast();
+                return;
+              }
               showDialog(
                 context: context,
                 builder: (_) => _ChangeNameDialog(currentName: appState.name),
@@ -29,7 +40,12 @@ class SettingsPage extends StatelessWidget{
           ListTile(
             leading: const Icon(Icons.logout),
             title: const Text('Sign Out'),
+            enabled: isOnline,
             onTap: () async {
+              if (!isOnline) {
+                offlineToast();
+                return;
+              }
               appState.signOut();
               Navigator.of(context).popUntil((route) => route.isFirst);
             },
@@ -66,6 +82,12 @@ class _ChangeNameDialogState extends State<_ChangeNameDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isOnline = context.watch<ConnectivityService>().isOnline;
+
+    void offlineToast() => ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Connect to the internet to make changes.')),
+    );
+
     return AlertDialog(
       title: const Text('Change Display Name'),
       content: TextField(
@@ -78,14 +100,14 @@ class _ChangeNameDialogState extends State<_ChangeNameDialog> {
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: () async {
+          onPressed: isOnline ? () async {
             final newName = _controller.text.trim();
             if (newName.isNotEmpty) {
               await context.read<MyAppState>().setName(newName);
               if (!context.mounted) return;
               Navigator.pop(context);
             }
-          },
+          } : offlineToast, 
           child: const Text('Save'),
         ),
       ],

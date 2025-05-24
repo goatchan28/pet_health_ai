@@ -5,10 +5,19 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:pet_health_ai/main.dart';
 import 'package:pet_health_ai/models/app_state.dart';
 import 'package:pet_health_ai/pages/home_page.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+
+void _showOfflineMsg(BuildContext ctx) =>
+  ScaffoldMessenger.of(ctx).showSnackBar(
+    const SnackBar(
+      content: Text('Connect to the internet to make changes.'),
+    ),
+  );
+
 
 class CameraPage extends StatefulWidget {
   final CameraDescription camera;
@@ -113,6 +122,11 @@ class _QRScannerViewState extends State<QRScannerView> {
               if (_busy) return;
               _busy = true;
               
+               if (!context.read<ConnectivityService>().isOnline) {
+                _showOfflineMsg(context);
+                _busy = false;
+                return;                         // ← nothing else happens
+              }
               try {
                 await controller.stop();
 
@@ -388,6 +402,10 @@ class _NormalCameraViewState extends State<NormalCameraView> {
                     onPressed: _isUploading 
                       ? null 
                       : () async {
+                        if (!context.read<ConnectivityService>().isOnline) {
+                          _showOfflineMsg(context);
+                          return;
+                        }
                         setState(() {
                           _isUploading = true;
                         });
@@ -784,12 +802,24 @@ class _ReviewFormState extends State<_ReviewForm> {
               OutlinedButton.icon(
                 icon: const Icon(Icons.cancel),
                 label: const Text('Cancel'),
-                onPressed: _onCancel,
+                onPressed: (){
+                  if (!context.read<ConnectivityService>().isOnline) {
+                    _showOfflineMsg(context);
+                    return;
+                  }
+                  _onCancel;
+                }
               ),
               ElevatedButton.icon(
                 icon: const Icon(Icons.check),
                 label: const Text('Verify'),
-                onPressed: _onVerify,
+                onPressed: () {
+                  if (!context.read<ConnectivityService>().isOnline) {
+                    _showOfflineMsg(context);
+                    return;
+                  }
+                  _onVerify;
+                },
               ),
             ],
           ),

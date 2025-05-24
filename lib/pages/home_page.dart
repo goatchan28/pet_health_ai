@@ -1,8 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:pet_health_ai/main.dart';
 import 'package:provider/provider.dart';
 import 'package:pet_health_ai/models/pet.dart';
 import 'package:pet_health_ai/models/app_state.dart';
+
+void _showOfflineMsg(BuildContext ctx) =>
+  ScaffoldMessenger.of(ctx).showSnackBar(
+    const SnackBar(
+      content: Text('Connect to the internet to make changes.'),
+    ),
+  );
+
 
 class HomePage extends StatefulWidget {
   final Pet pet;
@@ -30,6 +39,7 @@ class _HomePageState extends State<HomePage> {
 
 @override
   Widget build(BuildContext context) {
+    final online = context.read<ConnectivityService>().isOnline;
     final theme = Theme.of(context);
     var appState = context.watch<MyAppState>();
 
@@ -43,10 +53,10 @@ class _HomePageState extends State<HomePage> {
             child: CircleAvatar(
               backgroundColor: Colors.grey[300],
               radius: 20,
-              foregroundImage: appState.selectedPet.imageUrl != null
+              foregroundImage: (online && appState.selectedPet.imageUrl != null)
                 ? NetworkImage(appState.selectedPet.imageUrl!)
                 : null,
-              child: appState.selectedPet.imageUrl == null
+              child: (!online || appState.selectedPet.imageUrl == null)
                 ? Image.asset("assets/images/sigmalogo.png", fit: BoxFit.contain)
                 : null,
             ),
@@ -226,7 +236,13 @@ class _HomePageState extends State<HomePage> {
                   children: [
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(foregroundColor: theme.primaryColor, backgroundColor: theme.secondaryHeaderColor),
-                      onPressed: ()  => _showExerciseLogDialog(context, widget.pet, appState), 
+                      onPressed: online ? ()  {
+                        if (!context.read<ConnectivityService>().isOnline) {
+                          _showOfflineMsg(context);
+                          return;
+                        }
+                        _showExerciseLogDialog(context, widget.pet, appState);
+                        } : () => _showOfflineMsg(context), 
                       child: Text("Log Exercise", style:TextStyle(fontSize: 16))
                     ),
                     ClipRRect(
@@ -424,14 +440,18 @@ class _HomePageState extends State<HomePage> {
           ElevatedButton(
              onPressed: ()
               {
-              double minutesVal = double.tryParse(minutes.text) ?? 0;
-              if (selectedExerciseType == null || selectedExerciseType!.isEmpty) {
-                print("❌ Please select an exercise type!");
-                return;
-              }
-               pet.logExercise(exerciseType: selectedExerciseType!, minutes: minutesVal, appState: appState);
-              Navigator.pop(context);
-            },
+                if (!context.read<ConnectivityService>().isOnline) {
+                  _showOfflineMsg(context);
+                  return;
+                }
+                double minutesVal = double.tryParse(minutes.text) ?? 0;
+                if (selectedExerciseType == null || selectedExerciseType!.isEmpty) {
+                  print("❌ Please select an exercise type!");
+                  return;
+                }
+                pet.logExercise(exerciseType: selectedExerciseType!, minutes: minutesVal, appState: appState);
+                Navigator.pop(context);
+              },
             child: Text("Enter"),
           )  
         ],
@@ -441,6 +461,11 @@ class _HomePageState extends State<HomePage> {
 }
 
 Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProductName, String? selectedProductBarcode}) {
+  final online = context.read<ConnectivityService>().isOnline;
+  if (!online) {
+    _showOfflineMsg(context);  
+    return Future.value();                   
+  }
   var appState = context.read<MyAppState>();
   ScrollController scrollController = ScrollController();
   TextEditingController barcodeController = TextEditingController();
@@ -584,12 +609,12 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                             children: [
                               SizedBox(height: 10),
                               ElevatedButton(
-                                onPressed: () {
+                                onPressed: online ? () {
                                   final barcode = barcodeController.text.trim(); 
                                   appState.startManualPhotoFlow(barcode);
                                   appState.barcodeNotFound = false;
                                   Navigator.pop(context);
-                                }, 
+                                } : () => _showOfflineMsg(context), 
                                 child: Text("Take Pictures of Food Package")
                               )
                             ],
@@ -662,7 +687,11 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                                         backgroundColor: Colors.blueAccent,
                                         foregroundColor: Colors.white,
                                       ),
-                                      onPressed: () {
+                                      onPressed: online ? () {
+                                        if (!context.read<ConnectivityService>().isOnline) {
+                                          _showOfflineMsg(context);
+                                          return;
+                                        }
                                         if ((mode == 0) && foodData != null) {
                                           appState.updatePetIntake(pet, foodData!['nutritionalInfo'], foodData!['barcode'], foodData!['productName'], "${foodData!['amount']} $unitChosen");
                                           appState.barcodeNotFound = false;
@@ -691,7 +720,7 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                                           setState(() {}); // Refresh UI
                                           Navigator.pop(context);
                                         }
-                                      },
+                                      } : () => _showOfflineMsg(context),
                                       child: Text("Add Food"),
                                     ),
                                   ],
@@ -756,7 +785,11 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                 child: Text("Cancel"),
               ),
               ElevatedButton(
-                onPressed: () async {
+                onPressed: online ? () async {
+                  if (!context.read<ConnectivityService>().isOnline) {
+                    _showOfflineMsg(context);
+                    return;
+                  }
                   FocusScope.of(context).unfocus();
                   if (mode == 0){
                     String? barcode = barcodeController.text;
@@ -813,7 +846,7 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                     );
                     Navigator.pop(context);
                   }
-                },
+                } : () => _showOfflineMsg(context),
                 child: Text("Submit"),
               ),
             ],
@@ -1048,6 +1081,7 @@ Future<void> showProductDialog(BuildContext context,
     MyAppState appState,
     {String? productName, Map<String, double>? nutrition,}
   ) async {
+    final online = context.read<ConnectivityService>().isOnline;
     final bool isManual = barcode == "MANUAL_ENTRY";
 
     if (!isManual) {
@@ -1109,11 +1143,11 @@ Future<void> showProductDialog(BuildContext context,
                         color: Colors.amber,
                         size: 50, // Gold color for the star
                       ),
-                      onPressed: ()  {
+                      onPressed: online ? ()  {
                         setDialogState(() {
                           isFavorite = !isFavorite; // Toggle UI state
                         });
-                      },
+                      } : () => _showOfflineMsg(context),
                     ),
                 ],
               ),
@@ -1145,6 +1179,10 @@ Future<void> showProductDialog(BuildContext context,
               actions: [
                 TextButton(
                   onPressed: isProcessing ? null : () async {
+                    if (!online) {
+                      Navigator.pop(context);
+                      return;
+                    }
                     setDialogState(() {
                       isProcessing = true; // Start processing
                     });

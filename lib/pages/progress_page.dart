@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:pet_health_ai/main.dart';
 import 'package:pet_health_ai/models/app_state.dart';
 import 'package:pet_health_ai/models/pet.dart';
 import 'package:pet_health_ai/widgets/charts.dart';
 import 'package:provider/provider.dart';
+
+void _showOfflineMsg(BuildContext ctx) =>
+  ScaffoldMessenger.of(ctx).showSnackBar(
+    const SnackBar(content: Text('Connect to the internet to make changes.')),
+  );
+
 
 class ProgressTrackerPage extends StatefulWidget {
   final Pet pet;
@@ -68,6 +75,11 @@ class _ProgressTrackerPageState extends State<ProgressTrackerPage> {
 }
 
 Future<void> showVetVisitDialog(BuildContext context, Pet pet) async {
+  final online = context.read<ConnectivityService>().isOnline;
+  if (!online) {
+    _showOfflineMsg(context);
+    return Future.value();
+  }
   var appState = context.read<MyAppState>();
   Map<String, TextEditingController> controllers = {
     "Date(MM/DD/YY or MM-DD-YY)": TextEditingController(),
@@ -171,6 +183,8 @@ Future<void> showVetVisitDialog(BuildContext context, Pet pet) async {
           ),
           ElevatedButton(
             onPressed: () {
+              final online = context.read<ConnectivityService>().isOnline;
+              if (!online) { _showOfflineMsg(context); return; }
               validateAndSubmit();
             },
             child: Text("Enter"),
