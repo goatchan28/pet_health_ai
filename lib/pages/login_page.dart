@@ -1,7 +1,15 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:pet_health_ai/main.dart';
 import 'package:pet_health_ai/models/app_state.dart';
 import 'package:provider/provider.dart';
+
+void _showOfflineMsg(BuildContext ctx) =>
+  ScaffoldMessenger.of(ctx).showSnackBar(
+    const SnackBar(
+      content: Text('Connect to the internet to make changes.'),
+    ),
+  );
 
 class LoginPage extends StatefulWidget {
   static route() => MaterialPageRoute(
@@ -26,6 +34,10 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> loginUserWithEmailAndPassword() async {
+    if (!context.read<ConnectivityService>().isOnline) {
+      _showOfflineMsg(context);
+      return;
+    }
     try {
       var appState = context.read<MyAppState>();
       final userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
@@ -40,7 +52,7 @@ class _LoginPageState extends State<LoginPage> {
       }
       
       String thisName = user.displayName ?? "Guest";
-      appState.changeIndex(2);
+      appState.changeIndex(0);
       await appState.setName(thisName);
       if (user.photoURL != null) {
         await appState.setProfilePicture(user.photoURL!);
@@ -91,7 +103,13 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 20),
               ElevatedButton(
-                onPressed: () async {await loginUserWithEmailAndPassword();},
+                onPressed: () async {
+                  if (!context.read<ConnectivityService>().isOnline) {
+                    _showOfflineMsg(context);
+                    return;
+                  }
+                  await loginUserWithEmailAndPassword();
+                },
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                 child: const Text(
                   'SIGN IN',

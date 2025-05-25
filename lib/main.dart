@@ -128,7 +128,7 @@ class MyApp extends StatelessWidget {
           scaffoldBackgroundColor: Color.fromRGBO(215,215,215,1),
         ),
       home: SplashGate(
-        child: StreamBuilder(
+        child: StreamBuilder<User?>(
           stream: FirebaseAuth.instance.authStateChanges(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting){
@@ -137,12 +137,13 @@ class MyApp extends StatelessWidget {
               );
             }
             if (snapshot.hasData && snapshot.data != null) {
-              var appState = context.watch<MyAppState>();
-              if (appState.needsToEnterName) {
-                return const EnterNamePage();
-              } else {
-                return MyHomePage(camera: camera);
-              }
+              return Consumer<MyAppState>(                 // <-- add this
+                builder: (_, appState, __) {
+                  return appState.needsToEnterName
+                      ? const EnterNamePage()
+                      : MyHomePage(camera: camera);
+                },
+              );
             } else {
               return EnterAccountPage();
             }
@@ -256,8 +257,10 @@ class _EnterAccountPageState extends State<EnterAccountPage>{
     switch(appState.enterAccountIndex){
       case 0:
         page = SignUpPage();
+        break;
       case 1:
         page = LoginPage();
+        break;
       default:
         throw UnimplementedError('No widget for selectedIndex: ${appState.enterAccountIndex}');
     } 

@@ -1,7 +1,16 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:pet_health_ai/main.dart';
 import 'package:pet_health_ai/models/app_state.dart';
 import 'package:provider/provider.dart';
+
+void _showOfflineMsg(BuildContext ctx) =>
+  ScaffoldMessenger.of(ctx).showSnackBar(
+    const SnackBar(
+      content: Text('Connect to the internet to make changes.'),
+    ),
+  );
+
 
 class SignUpPage extends StatefulWidget {
   static route() => MaterialPageRoute(
@@ -27,6 +36,10 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   Future<void> createUserWithEmailAndPassword() async {
+    if (!context.read<ConnectivityService>().isOnline) {
+      _showOfflineMsg(context);
+      return;
+    }
     try {
       final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: emailController.text.trim(), 
@@ -79,7 +92,13 @@ class _SignUpPageState extends State<SignUpPage> {
               ),
               const SizedBox(height: 20),
               ElevatedButton(
-                onPressed: () async {await createUserWithEmailAndPassword();},
+                onPressed: () async {
+                  if (!context.read<ConnectivityService>().isOnline) {
+                    _showOfflineMsg(context);
+                    return;
+                  }
+                  await createUserWithEmailAndPassword();
+                },
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                 child: const Text(
                   'SIGN UP',

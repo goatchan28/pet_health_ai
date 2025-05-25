@@ -10,7 +10,7 @@ import 'dart:convert';
 import "package:shared_preferences/shared_preferences.dart";
 
 class MyAppState extends ChangeNotifier {
-  int currentPageIndex = 2;
+  int currentPageIndex = 0;
   int enterAccountIndex = 0;
   int petIndex = 0;
   Map<String, dynamic> scannedFoodData = {};
@@ -577,6 +577,9 @@ class MyAppState extends ChangeNotifier {
       await prefs.setString('lastResetDate', lastDate);
     }
     printSharedPreferences();
+
+    profileImageUrl = null;  
+    hasLoadedData = false;
     pets = [defaultPet];
     print(pets);
     setNeedsToEnterName(false);
