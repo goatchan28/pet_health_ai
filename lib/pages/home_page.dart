@@ -383,12 +383,12 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _showExerciseLogDialog(BuildContext context, Pet pet, MyAppState appState){
+  void _showExerciseLogDialog(BuildContext outerCtx, Pet pet, MyAppState appState){
     TextEditingController minutes = TextEditingController(text: "0");
     String? selectedExerciseType;
     List<String> exerciseOptions = ["Walk", "Run", "Fetch"];
     
-    showDialog(context: context, builder: (context){
+    showDialog(context: outerCtx, builder: (dialogCtx){
       return AlertDialog(
         title: Text("Log Exercise"),
         content: SizedBox(
@@ -449,8 +449,13 @@ class _HomePageState extends State<HomePage> {
                   print("❌ Please select an exercise type!");
                   return;
                 }
-                pet.logExercise(exerciseType: selectedExerciseType!, minutes: minutesVal, appState: appState);
-                Navigator.pop(context);
+                appState.run(
+                  outerCtx, () async {
+                    await pet.logExercise(exerciseType: selectedExerciseType!, minutes: minutesVal, appState: appState);
+                  },
+                  successMsg: '${pet.name}\'s ${selectedExerciseType!} saved!'
+                );
+                if (dialogCtx.mounted) Navigator.pop(dialogCtx);
               },
             child: Text("Enter"),
           )  
@@ -460,25 +465,29 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProductName, String? selectedProductBarcode}) {
-  final online = context.read<ConnectivityService>().isOnline;
+Future<void> showFeedDialog(BuildContext outerCtx, Pet pet, {String? selectedProductName, String? selectedProductBarcode}) {
+  final online = outerCtx.read<ConnectivityService>().isOnline;
   if (!online) {
-    _showOfflineMsg(context);  
+    _showOfflineMsg(outerCtx);  
     return Future.value();                   
   }
-  var appState = context.read<MyAppState>();
+  var appState = outerCtx.read<MyAppState>();
   ScrollController scrollController = ScrollController();
   TextEditingController barcodeController = TextEditingController();
   List<String> unitOptions = ["Grams", "Cups", "Ounces"];
   TextEditingController amountController = TextEditingController();
   TextEditingController foodNameController = TextEditingController();
   String? unitChosen;
-  String? favoriteChosen = selectedProductName;
   Map<String, TextEditingController> manualControllers = {};
   int mode = 0;
   Map<String, dynamic>? foodData;
   List favoriteProductNames = pet.favoriteFoods!.map((food) => food["productName"] ?? "Unknown Product").toList();
   favoriteProductNames.add("None");
+  String favoriteChosen =
+    (selectedProductName != null &&
+            favoriteProductNames.contains(selectedProductName))
+        ? selectedProductName
+        : "None";
   manualControllers["Calories"] = TextEditingController(text: "0");
 
   pet.nutritionalRequirements.forEach((key, value) {
@@ -497,10 +506,10 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
   }
 
   return showDialog(
-    context: context,
-    builder: (context) {
+    context: outerCtx,
+    builder: (dialogCtx) {
       return StatefulBuilder(
-        builder: (context, setState) {
+        builder: (dialogCtx, setState) {
           return AlertDialog(
             title: Text("Feed ${pet.name}"),
             content: SingleChildScrollView( // ✅ Prevents Overflow Errors
@@ -558,7 +567,7 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                             }).toList(),
                             onChanged: (String? newValue){
                               setState(() {
-                                favoriteChosen = newValue;
+                                favoriteChosen = newValue!;
                                 // ✅ Find the barcode corresponding to the selected favorite food
                                 var selectedFood = pet.favoriteFoods!.firstWhere(
                                   (food) => food["productName"] == newValue,
@@ -613,8 +622,8 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                                   final barcode = barcodeController.text.trim(); 
                                   appState.startManualPhotoFlow(barcode);
                                   appState.barcodeNotFound = false;
-                                  Navigator.pop(context);
-                                } : () => _showOfflineMsg(context), 
+                                  Navigator.pop(dialogCtx);
+                                } : () => _showOfflineMsg(outerCtx), 
                                 child: Text("Take Pictures of Food Package")
                               )
                             ],
@@ -688,15 +697,30 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                                         foregroundColor: Colors.white,
                                       ),
                                       onPressed: online ? () {
-                                        if (!context.read<ConnectivityService>().isOnline) {
-                                          _showOfflineMsg(context);
+                                        if (!outerCtx.read<ConnectivityService>().isOnline) {
+                                          _showOfflineMsg(outerCtx);
                                           return;
                                         }
                                         if ((mode == 0) && foodData != null) {
-                                          appState.updatePetIntake(pet, foodData!['nutritionalInfo'], foodData!['barcode'], foodData!['productName'], "${foodData!['amount']} $unitChosen");
+                                          appState.run(
+                                            outerCtx,                                   // use the long-lived page ctx
+                                            () async {
+                                              appState.updatePetIntake(
+                                                pet, 
+                                                foodData!['nutritionalInfo'], 
+                                                foodData!['barcode'], 
+                                                foodData!['productName'], 
+                                                "${foodData!['amount']} $unitChosen"
+                                              );
+                                              // if you want the spinner to be visible for at least
+                                              // one frame, you can add a micro delay (optional):
+                                              // await Future.delayed(const Duration(milliseconds: 150));
+                                            },
+                                            successMsg: 'Food added from barcode',                   // or any custom text
+                                          );
                                           appState.barcodeNotFound = false;
                                           setState(() {}); // Refresh UI
-                                          Navigator.pop(context);
+                                          Navigator.pop(dialogCtx);
                                         } 
                                         else if (mode == 2) {
                                           Map<String, double> updatedValues = {};
@@ -718,9 +742,9 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                                           appState.updatePetIntake(pet, updatedValues, "No Barcode", "No Name", "$amount $unitChosen");
                                           appState.barcodeNotFound = false;
                                           setState(() {}); // Refresh UI
-                                          Navigator.pop(context);
+                                          Navigator.pop(dialogCtx);
                                         }
-                                      } : () => _showOfflineMsg(context),
+                                      } : () => _showOfflineMsg(outerCtx),
                                       child: Text("Add Food"),
                                     ),
                                   ],
@@ -780,17 +804,17 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                 onPressed: () {
                   appState.scannedFoodData = {}; // ✅ Reset scanned food data
                   appState.barcodeNotFound = false;
-                  Navigator.pop(context);
+                  Navigator.pop(dialogCtx);
                 },
                 child: Text("Cancel"),
               ),
               ElevatedButton(
                 onPressed: online ? () async {
-                  if (!context.read<ConnectivityService>().isOnline) {
-                    _showOfflineMsg(context);
+                  if (!outerCtx.read<ConnectivityService>().isOnline) {
+                    _showOfflineMsg(outerCtx);
                     return;
                   }
-                  FocusScope.of(context).unfocus();
+                  FocusScope.of(dialogCtx).unfocus();
                   if (mode == 0){
                     String? barcode = barcodeController.text;
                     if (barcode.isEmpty) {
@@ -837,16 +861,25 @@ Future<void> showFeedDialog(BuildContext context, Pet pet, {String? selectedProd
                       print("❌ Error: Please enter an amount");
                       return;
                     }
-                    appState.updatePetIntake(
-                      pet,
-                      manualNutrition,
-                      "MANUAL_ENTRY",          // barcode placeholder
-                      foodName,          // product name placeholder
-                      amountText,
+                    await appState.run(
+                      outerCtx,                                   // use the long-lived page ctx
+                      () async {
+                        appState.updatePetIntake(
+                          pet,
+                          manualNutrition,
+                          'MANUAL_ENTRY',
+                          foodName,
+                          amountText,
+                        );
+                        // if you want the spinner to be visible for at least
+                        // one frame, you can add a micro delay (optional):
+                        // await Future.delayed(const Duration(milliseconds: 150));
+                      },
+                      successMsg: 'Food manually added',                   // or any custom text
                     );
-                    Navigator.pop(context);
+                    if (dialogCtx.mounted) Navigator.pop(dialogCtx);
                   }
-                } : () => _showOfflineMsg(context),
+                } : () => _showOfflineMsg(outerCtx),
                 child: Text("Submit"),
               ),
             ],

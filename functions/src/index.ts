@@ -198,17 +198,17 @@ export const dailyReset = onSchedule(
       const intake = p.nutritionalIntake ?? {};
 
       // ----- 1. archive yesterday’s totals -----
-      const wp = (n: string) => `weeklyNutrients.${dayName}.${n}`;
       if (dayName === "Saturday") {
         bw.update(d.ref, {weeklyNutrients: initializeWeeklyNutrients()});
+      } else {
+        const wp = (n: string) => `weeklyNutrients.${dayName}.${n}`;
+        bw.update(d.ref, {
+          [wp("Carbohydrates")]: Number(intake["Carbohydrates"] ?? 0),
+          [wp("Crude Protein")]: Number(intake["Crude Protein"] ?? 0),
+          [wp("Crude Fat")]: Number(intake["Crude Fat"] ?? 0),
+          [wp("Calories")]: Number(p.calorieIntake ?? 0),
+        });
       }
-      bw.update(d.ref, {
-        [wp("Carbohydrates")]: Number(intake["Carbohydrates"] ?? 0),
-        [wp("Crude Protein")]: Number(intake["Crude Protein"] ?? 0),
-        [wp("Crude Fat")]: Number(intake["Crude Fat"] ?? 0),
-        [wp("Calories")]: Number(p.calorieIntake ?? 0),
-      });
-
       // ----- 2. zero today’s counters -----
       bw.update(d.ref, {
         calorieIntake: 0,

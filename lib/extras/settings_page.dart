@@ -33,7 +33,7 @@ class SettingsPage extends StatelessWidget{
               }
               showDialog(
                 context: context,
-                builder: (_) => _ChangeNameDialog(currentName: appState.name),
+                builder: (_) => _ChangeNameDialog(outerCtx: context, currentName: appState.name),
               );
             },
           ),
@@ -57,9 +57,10 @@ class SettingsPage extends StatelessWidget{
 }
 
 class _ChangeNameDialog extends StatefulWidget {
+  final BuildContext outerCtx;
   final String currentName;
 
-  const _ChangeNameDialog({required this.currentName});
+  const _ChangeNameDialog({required this.currentName, required this.outerCtx});
 
   @override
   State<_ChangeNameDialog> createState() => _ChangeNameDialogState();
@@ -67,6 +68,7 @@ class _ChangeNameDialog extends StatefulWidget {
 
 class _ChangeNameDialogState extends State<_ChangeNameDialog> {
   late TextEditingController _controller;
+  bool uploading = false;
 
   @override
   void initState() {
@@ -82,6 +84,7 @@ class _ChangeNameDialogState extends State<_ChangeNameDialog> {
 
   @override
   Widget build(BuildContext context) {
+    var appState = context.read<MyAppState>();
     final isOnline = context.watch<ConnectivityService>().isOnline;
 
     void offlineToast() => ScaffoldMessenger.of(context).showSnackBar(
@@ -90,10 +93,15 @@ class _ChangeNameDialogState extends State<_ChangeNameDialog> {
 
     return AlertDialog(
       title: const Text('Change Display Name'),
-      content: TextField(
-        controller: _controller,
-        decoration: const InputDecoration(labelText: 'New Name'),
-      ),
+      content: uploading
+        ? const SizedBox(
+            height: 80,
+            child: Center(child: CircularProgressIndicator()),
+          )
+        : TextField(
+            controller: _controller,
+            decoration: const InputDecoration(labelText: 'New Name'),
+          ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
@@ -102,11 +110,17 @@ class _ChangeNameDialogState extends State<_ChangeNameDialog> {
         ElevatedButton(
           onPressed: isOnline ? () async {
             final newName = _controller.text.trim();
-            if (newName.isNotEmpty) {
-              await context.read<MyAppState>().setName(newName);
-              if (!context.mounted) return;
-              Navigator.pop(context);
-            }
+            if (newName.isEmpty) return;
+            setState(() => uploading = true);
+            appState.run(
+              widget.outerCtx,
+              () async {
+              await appState.setName(newName);
+              },
+              successMsg: 'Name has been changed to $newName!'
+            );
+            if (!context.mounted) return;
+            Navigator.pop(context);
           } : offlineToast, 
           child: const Text('Save'),
         ),

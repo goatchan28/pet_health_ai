@@ -8,6 +8,7 @@ import 'package:pet_health_ai/firebase_options.dart';
 import 'package:pet_health_ai/pages/login_page.dart';
 import 'package:pet_health_ai/pages/name_page.dart';
 import 'package:pet_health_ai/pages/signup_page.dart';
+import 'package:pet_health_ai/widgets/busy_overlay.dart';
 import 'package:provider/provider.dart';
 import 'package:pet_health_ai/models/pet.dart';
 import 'package:pet_health_ai/models/app_state.dart';
@@ -203,39 +204,41 @@ class _MyHomePageState extends State<MyHomePage> {
       default:
         throw UnimplementedError('No widget for selectedIndex: ${appState.currentPageIndex}');
     }
-    return ConnectivityBanner(
-      child: Scaffold(
-        body: Container(
-          color: Theme.of(context).colorScheme.primary,
-          child: page,
-        ),
-        bottomNavigationBar: NavigationBar(
-          destinations: [
-            NavigationDestination(
-              icon: Image.asset("assets/images/sigmalogo.png", width: 88, height: 88, fit: BoxFit.cover,), 
-              label: '',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.track_changes), 
-              label: 'Progress',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.camera), 
-              label: 'Camera',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.rice_bowl), 
-              label: 'Food',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.person), 
-              label: 'Profile',
-            ),
-          ],
-          selectedIndex: appState.currentPageIndex, 
-          onDestinationSelected: (value){
-              appState.changeIndex(value);
-          },
+    return BusyOverlay(
+      child: ConnectivityBanner(
+        child: Scaffold(
+          body: Container(
+            color: Theme.of(context).colorScheme.primary,
+            child: page,
+          ),
+          bottomNavigationBar: NavigationBar(
+            destinations: [
+              NavigationDestination(
+                icon: Image.asset("assets/images/sigmalogo.png", width: 88, height: 88, fit: BoxFit.cover,), 
+                label: '',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.track_changes), 
+                label: 'Progress',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.camera), 
+                label: 'Camera',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.rice_bowl), 
+                label: 'Food',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.person), 
+                label: 'Profile',
+              ),
+            ],
+            selectedIndex: appState.currentPageIndex, 
+            onDestinationSelected: (value){
+                appState.changeIndex(value);
+            },
+          ),
         ),
       ),
     );

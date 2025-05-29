@@ -25,6 +25,8 @@ class MyAppState extends ChangeNotifier {
   String? memberSince;
   bool   startWithManualCamera = false;   // NEW
   String? manualCameraBarcode;            // NEW
+  bool busy = false;
+  bool get isBusy => busy;
   
   MyAppState() {
     pets = [defaultPet];
@@ -673,7 +675,10 @@ void printSharedPreferences() {
                   String baseKey = key.endsWith("_100g")
                       ? key.substring(0, key.length - 5)
                       : key;
-                  double? bestVal = _pickBestPer100gValue(baseKey, nutriments);
+                      double? bestVal = (mappedKey == 'Calories')
+                          ? _pickBestCalories(nutriments)
+                          : _pickBestPer100gValue(baseKey, nutriments);
+
                   
                   if (bestVal != null) {
                     // Now handle the difference if "nutritionDataPer" == "serving"
@@ -709,7 +714,9 @@ void printSharedPreferences() {
                     String baseKey = key.endsWith("_100g")
                         ? key.substring(0, key.length - 5)
                         : key;
-                    double? bestVal = _pickBestPer100gValue(baseKey, nutrimentsEstimated);
+                    double? bestVal = (mappedKey == 'Calories')
+                      ? _pickBestCalories(nutrimentsEstimated)
+                      : _pickBestPer100gValue(baseKey, nutrimentsEstimated);
                     if (bestVal != null) {
                       double finalVal;
                       if (nutritionDataPer == "serving"
@@ -724,6 +731,43 @@ void printSharedPreferences() {
                   }
                 }
               });
+            }
+
+            if (!extractedNutrients.containsKey('Carbohydrates')) {
+              const calKey  = 'Calories';        // energy-kcal → “Calories”
+              const proKey  = 'Crude Protein';   // proteins    → “Crude Protein”
+              const fatKey  = 'Crude Fat';       // fat         → “Crude Fat”
+              const carbKey = 'Carbohydrates';   // target key
+
+              final hasCal = extractedNutrients.containsKey(calKey);
+              final hasPro = extractedNutrients.containsKey(proKey);
+              final hasFat = extractedNutrients.containsKey(fatKey);
+
+              if (hasCal && hasPro && hasFat) {
+                final double calories = extractedNutrients[calKey]!;
+                final double protein  = extractedNutrients[proKey]!;
+                final double fat      = extractedNutrients[fatKey]!;
+
+                // carbs (g/100 g) = (kcal − protein·4 − fat·9) / 4
+                final double carbs = (calories - (protein * 4) - (fat * 9)) / 4;
+
+                if (carbs >= 0) {
+                  extractedNutrients[carbKey] = carbs;
+                } else {
+                  // Infeasible → flag as not-found
+                  barcodeNotFound = true;
+                  scannedFoodData.clear();
+                }
+              } else {
+                // Missing Calories or Protein or Fat → not-found
+                barcodeNotFound = true;
+                scannedFoodData.clear();
+              }
+              if (barcodeNotFound) {
+                scannedFoodData.clear();
+                notifyListeners();
+                return;
+              }
             }
 
             scannedFoodData = {
@@ -777,11 +821,13 @@ void printSharedPreferences() {
     if (rawDouble == null && p100gDouble == null) return null;
     if (rawDouble == null) return p100gDouble;
     if (p100gDouble == null) return rawDouble;
-
-    bool isCalories = key.contains("energy-kcal");
-
-    double lowerBound = isCalories ? 50 : 1;   
-    double upperBound = isCalories ? 1500 : 100;
+    
+    double ratio = rawDouble / p100gDouble;
+    if (ratio >= 5)   return rawDouble;    // raw is ~10× larger
+    if (ratio <= 0.2) return p100gDouble;  // *_100g is ~10× larger
+    
+    const lowerBound = 1.0;
+    const upperBound = 100.0;
 
     bool rawInRange = (rawDouble >= lowerBound && rawDouble <= upperBound);
     bool p100gInRange = (p100gDouble >= lowerBound && p100gDouble <= upperBound);
@@ -793,8 +839,44 @@ void printSharedPreferences() {
       return p100gDouble;
     }
 
-    return p100gDouble;
+    return rawDouble;
   }
+
+    // NEW: pick most feasible Calories per 100 g
+  double? _pickBestCalories(Map<String, dynamic> n) {
+    // candidate keys, in rough priority order
+    const keys = [
+      'energy-kcal_value_computed',
+      'energy-kcal',
+      'energy-kcal_100g',
+      'energy-kcal_value',
+      'energy',
+      'energy_100g',
+    ];
+
+    // collect positive numeric values
+    final List<double> cals = [];
+    for (final k in keys) {
+      final v = n[k];
+      if (v is num && v > 0) cals.add(v.toDouble());
+    }
+    if (cals.isEmpty) return null;
+
+    // sanity-check against macros (protein & fat) if available
+    final prot = _pickBestPer100gValue('proteins', n) ?? 0;
+    final fat  = _pickBestPer100gValue('fat', n) ?? 0;
+    final minNeeded = prot * 4 + fat * 9;        // kcal/100 g required by macros
+
+    // choose the smallest candidate that still meets that minimum
+    cals.sort();
+    for (final c in cals) {
+      if (c >= minNeeded) return c;
+    }
+
+    // fallback: highest available value
+    return cals.last;
+  }
+
 
   Future<Map<String, dynamic>?> getFoodIntakeFromBarcode(String barcode, String unit, double amount) async {
     Map<String, dynamic>? finalData;
@@ -1019,5 +1101,27 @@ void printSharedPreferences() {
       manualCameraBarcode = barcode;
       startWithManualCamera = true;
       changeIndex(2);                       // switch to Camera tab
+    }
+
+    Future<T> run<T>(
+      BuildContext ctx,
+      Future<T> Function() task, {
+      String successMsg = 'Done!',
+    }) async {
+      busy = true;   notifyListeners();            // start spinner
+      try {
+        final result = await task();                // await your work
+        if (ctx.mounted) {ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(content: Text(successMsg, style: TextStyle(fontSize: 16),), backgroundColor: Colors.green),
+        );}
+        return result;
+      } catch (e) {
+        if (ctx.mounted) {ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );}
+        rethrow;
+      } finally {
+        busy = false;  notifyListeners();          // stop spinner
+      }
     }
   }

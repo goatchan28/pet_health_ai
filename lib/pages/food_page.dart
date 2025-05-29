@@ -108,6 +108,10 @@ class FavoriteItem extends StatelessWidget {
           trailing: IconButton(
             icon: Icon(Icons.star, color: Colors.amber),
             onPressed: () async {
+              if (!context.read<ConnectivityService>().isOnline) {
+                _showOfflineMsg(context);
+                return;
+              }
               await appState.selectedPet.changeFavorites(barcode, appState);
             },
           ),

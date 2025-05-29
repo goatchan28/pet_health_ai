@@ -141,8 +141,18 @@ Future<void> showVetVisitDialog(BuildContext context, Pet pet) async {
       return;
     }
 
-    pet.recordVetVisit(date:date, weight: weight, height: height, bcs: bcs, notes: notes, appState: appState);
-    Navigator.pop(context);
+    appState.run(context, () async {
+      await pet.recordVetVisit(
+        date: date,
+        weight: weight,
+        height: height,
+        bcs: bcs,
+        notes: notes,
+        appState: appState,
+      );
+    }, successMsg: '${pet.name} vet visit saved!');
+
+    if (context.mounted) Navigator.pop(context);
   }
 
   await showDialog(

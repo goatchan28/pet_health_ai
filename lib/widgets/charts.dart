@@ -514,11 +514,19 @@ SideTitles leftTitles() => SideTitles(
   reservedSize: 40,
 );
 
+  int _labelStep(int n) {
+    if (n <= 7) return 1;          // show every label up to 8 points
+    if (n <= 15) return 2;         // show every 2nd for 9–15 points
+    return 3;                      // show every 3rd beyond that
+  }
+
   Widget bottomTitleWidgets(double value, TitleMeta meta) {
     int index = value.toInt();
     if (index < 0 || index >= filteredStats.length) return Container();
 
-    if (filteredStats.length > 10 && index % 2 != 0) return Container();
+    final step = _labelStep(filteredStats.length); 
+
+    if (index % step != 0) return Container();
 
     DateTime date = parseDate(filteredStats[index]["date"]);
     String formattedDate;
@@ -544,12 +552,19 @@ SideTitles leftTitles() => SideTitles(
     );
   }
 
-  SideTitles get bottomTitles => SideTitles(
-    showTitles: true,
-    getTitlesWidget: bottomTitleWidgets,
-    reservedSize: 24,
-    interval: 1, // ✅ Force label check every index
-  );
+  SideTitles get bottomTitles {
+    final bool isAllTime = widget.filterMonths == -1;
+    final bool isCrossYear = filteredStats.any((entry) {
+      return parseDate(entry["date"]).year != DateTime.now().year;
+    });
+
+    return SideTitles(
+      showTitles: true,
+      getTitlesWidget: bottomTitleWidgets,
+      reservedSize: (isAllTime || isCrossYear) ? 34 : 24,
+      interval: 1, // ✅ Force label check every index
+    );
+  }
 
 
   FlGridData get gridData => const FlGridData(show: false);

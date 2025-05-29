@@ -252,12 +252,21 @@ Future<void> showAddPetDialog(BuildContext context) async {
       return;
     }
 
-    appState.addPetManually(
-      name: name,
-      breed: breed,
-      weight: weight!,
-      age: age!,
-      neuteredSpayed: neuteredSpayed!,
+    appState.run(
+      context,                                   // use the long-lived page ctx
+      () async {
+        appState.addPetManually(
+          name: name,
+          breed: breed,
+          weight: weight!,
+          age: age!,
+          neuteredSpayed: neuteredSpayed!,
+        );
+        // if you want the spinner to be visible for at least
+        // one frame, you can add a micro delay (optional):
+        // await Future.delayed(const Duration(milliseconds: 150));
+      },
+      successMsg: '$name added sucessfully!',                   // or any custom text
     );
     Navigator.pop(context);
   }
@@ -423,14 +432,23 @@ class _EditPetDialogState extends State<EditPetDialog> {
 
       if (mounted) setState(() => uploading = true);
 
-      await appState.updatePetProfile(
-        originalPet: widget.pet,
-        name: nameCtrl.text.trim(),
-        breed: breedCtrl.text.trim(),
-        weight: double.tryParse(weightCtrl.text.trim()) ?? widget.pet.weight,
-        age: double.tryParse(ageCtrl.text.trim()) ?? widget.pet.age,
-        neuteredSpayed: neutered,
-        imageFile: newImageFile,
+      await appState.run(
+        context,                                   // use the long-lived page ctx
+        () async {
+          await appState.updatePetProfile(
+            originalPet: widget.pet,
+            name: nameCtrl.text.trim(),
+            breed: breedCtrl.text.trim(),
+            weight: double.tryParse(weightCtrl.text.trim()) ?? widget.pet.weight,
+            age: double.tryParse(ageCtrl.text.trim()) ?? widget.pet.age,
+            neuteredSpayed: neutered,
+            imageFile: newImageFile,
+          );
+          // if you want the spinner to be visible for at least
+          // one frame, you can add a micro delay (optional):
+          // await Future.delayed(const Duration(milliseconds: 150));
+        },
+        successMsg: '${nameCtrl.text.trim()}\'s information updated successfully!',                   // or any custom text
       );
 
       if (mounted) Navigator.of(context).pop();
@@ -448,8 +466,18 @@ class _EditPetDialogState extends State<EditPetDialog> {
       return;
     }
     final appState = context.read<MyAppState>();
-    await appState.removePet(widget.pet);
-    if (!context.mounted) return;
+    
+    await appState.run(
+        context,                                   // use the long-lived page ctx
+        () async {
+          await appState.removePet(widget.pet);
+          // if you want the spinner to be visible for at least
+          // one frame, you can add a micro delay (optional):
+          // await Future.delayed(const Duration(milliseconds: 150));
+        },
+        successMsg: '${nameCtrl.text.trim()} removed successfully',                   // or any custom text
+      );
+    if (!mounted) return;
     Navigator.of(context).pop();
   }
 

@@ -710,6 +710,39 @@ class _ReviewFormState extends State<_ReviewForm> {
       }
     });
 
+    const protKey = 'Crude Protein';
+    const fatKey  = 'Crude Fat';
+    const carbKey = 'Carbohydrates';
+
+    final carbsAlready =
+        gaUpdates.containsKey(carbKey) ||
+        (_gaCtrls![carbKey]?.text.trim().isNotEmpty ?? false);
+
+    if (!carbsAlready) {
+      // pull best available values (user edit takes precedence)
+      double protein = (gaUpdates[protKey] ??
+              num.tryParse(_gaCtrls![protKey]?.text.trim() ?? ''))?.toDouble() ??
+          0;
+      double fat = (gaUpdates[fatKey] ??
+              num.tryParse(_gaCtrls![fatKey]?.text.trim() ?? ''))?.toDouble() ??
+          0;
+      double kcal = (topUpdates['caloriesPer100g'] ??
+              num.tryParse(_topCtrls!['caloriesPer100g']!.text.trim()))?.toDouble() ??
+          0;
+
+      if (kcal > 0) {
+        final carbs = (kcal - protein * 4 - fat * 9) / 4;
+        if (carbs >= 0) {
+          gaUpdates[carbKey] = (carbs * 10).roundToDouble() / 10; // 1 dec place
+          providedKeys.add(carbKey);                                  // mark as given
+        } else {
+          _missing.add(carbKey);
+        }
+      } else {
+        _missing.add(carbKey);
+      }
+    }
+
     final newMissing = _missing.difference(providedKeys);
 
     final updates = <String, dynamic>{
@@ -807,7 +840,7 @@ class _ReviewFormState extends State<_ReviewForm> {
                     _showOfflineMsg(context);
                     return;
                   }
-                  _onCancel;
+                  _onCancel();
                 }
               ),
               ElevatedButton.icon(
@@ -818,7 +851,7 @@ class _ReviewFormState extends State<_ReviewForm> {
                     _showOfflineMsg(context);
                     return;
                   }
-                  _onVerify;
+                  _onVerify();
                 },
               ),
             ],
