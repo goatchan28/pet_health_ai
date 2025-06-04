@@ -3,6 +3,7 @@
 import * as logger from "firebase-functions/logger";
 import {onDocumentCreated} from "firebase-functions/v2/firestore";
 import {onSchedule} from "firebase-functions/v2/scheduler";
+import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import {VertexAI} from "@google-cloud/vertexai";
 import {DateTime} from "luxon";
@@ -222,4 +223,81 @@ export const dailyReset = onSchedule(
     await sysRef.set({lastResetDate: today});
     logger.log(`dailyReset: processed ${petsSnap.size} pets`);
   }
+);
+
+export const cleanupUser = functions.auth.user().onDelete(async (user: functions.auth.UserRecord) => {
+  const uid = user.uid;
+  const db = admin.firestore();
+
+  /* 1. remove the user doc (ignore “not-found”) */
+  await db.doc(`users/${uid}`).delete().catch((err: any) => {
+    if (err.code !== 5) throw err; // Firestore ‘not-found’ = code 5
+  });
+
+  /* 2. unlink (or delete) any pets that reference this uid */
+  const petsSnap = await db
+    .collection("pets")
+    .where("ownerUID", "array-contains", uid)
+    .get();
+
+  const bw = db.bulkWriter();
+  petsSnap.forEach((doc) => {
+    const owners = doc.get("ownerUID") as string[];
+    const remaining = owners.filter((o) => o !== uid);
+
+    remaining.length === 0 ?
+      bw.delete(doc.ref) : // no owners left → delete pet
+      bw.update(doc.ref, {ownerUID: remaining}); // otherwise just unlink
+  });
+
+  await bw.close();
+  logger.log(`✅ processed ${petsSnap.size} pet(s) for uid ${uid}`);
+});
+
+export const weeklyScanCleanup = onSchedule(
+  {
+    schedule: "15 3 * * SAT", // every Saturday 03:15 AM
+    timeZone: "America/New_York",
+  },
+  async () => {
+    const fs = admin.firestore();
+    const bucket = admin.storage().bucket();
+
+    /* 1️⃣ collect all *current* front-image paths */
+    const foodSnap = await fs.collection("foods").select("frontImage").get();
+    const valid = new Set<string>();
+    foodSnap.forEach((d) => {
+      const p = d.get("frontImage") as string | undefined;
+      if (typeof p === "string" && p.trim()) valid.add(p);
+    });
+    logger.log(`weeklyScanCleanup ▶︎ ${valid.size} valid food images`);
+
+    /* 2️⃣ list every front.jpg we have under package-scans/ */
+    const [files] = await bucket.getFiles({prefix: "package-scans/"});
+    const orphanIds = new Set<string>();
+
+    for (const f of files) {
+      const name = f.name; // e.g. package-scans/abc/front.jpg
+      if (!name.endsWith("/front.jpg")) continue;
+      if (!valid.has(name)) {
+        const scanId = name.split("/")[1];
+        orphanIds.add(scanId);
+      }
+    }
+    logger.log(`weeklyScanCleanup ▶︎ ${orphanIds.size} orphan folder(s) found`);
+
+    /* 3️⃣ delete the orphans (storage + Firestore) */
+    const bw = fs.bulkWriter();
+    await Promise.all(
+      Array.from(orphanIds).map(async (id) => {
+        // remove all objects below package-scans/<id>/
+        await bucket.deleteFiles({prefix: `package-scans/${id}/`});
+        // remove the scan document (skip if it never existed)
+        bw.delete(fs.doc(`packageScans/${id}`));
+      }),
+    );
+    await bw.close();
+
+    logger.log(`weeklyScanCleanup ✅ removed ${orphanIds.size} folder(s)`);
+  },
 );

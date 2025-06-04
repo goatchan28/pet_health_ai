@@ -77,6 +77,10 @@ class FavoriteItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final online = context.read<ConnectivityService>().isOnline;
+
+    final double thumbW = (MediaQuery.sizeOf(context).width * 0.15)
+        .clamp(48.0, 90.0);
+    final double thumbH = thumbW * 1.9;
     
     String productName = food["productName"] ?? "Unknown Product";
     String brandName = food["brandName"] ?? "Unknown Brand";
@@ -91,8 +95,8 @@ class FavoriteItem extends StatelessWidget {
         margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
         child: ListTile(
           leading: imageUrl.isNotEmpty && online
-              ? Image.network(imageUrl, width: 55, height: 105, fit: BoxFit.cover)
-              : const Icon(Icons.rice_bowl, size: 55, color: Colors.grey), // Placeholder image,
+              ? Image.network(imageUrl, width: thumbW, height: thumbH, fit: BoxFit.cover)
+              : Icon(Icons.rice_bowl, size: thumbW, color: Colors.grey), // Placeholder image,
           isThreeLine: true,
           dense: true,
           title: Text(productName, style: TextStyle(fontWeight: FontWeight.bold)),
@@ -126,13 +130,24 @@ class RecommendedFoodView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textScaler = MediaQuery.maybeOf(context)?.textScaler 
+                        ?? TextScaler.noScaling; // returns a TextScaler
+    final double fontSize = textScaler
+        .scale(26)               // scales 26 logical pixels
+        .clamp(18.0, 32.0);      // keep within bounds
     return Scaffold(
-      body: const Center(
-        child: Text(
-          "Recommended Foods Section in Progress", 
-          style: TextStyle(fontSize: 36),
-          textAlign: TextAlign.center,
-        )
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Center(
+          child: Text(
+            "Recommended Foods Section in Progress", 
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: FontWeight.w500
+            ),
+            textAlign: TextAlign.center,
+          )
+        ),
       )
     );
   }
@@ -150,6 +165,11 @@ class RecommendedSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final width   = MediaQuery.sizeOf(context).width;
+    final double cardW = (width * 0.38).clamp(120.0, 180.0);
+    final double cardH = cardW * 1.25;          // preserve feel of 140 × 180
+    final double imgH  = cardH * 0.45;          // ≈ 80 px of the original
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -168,7 +188,7 @@ class RecommendedSection extends StatelessWidget {
           ),
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: SizedBox(
-            height: 180, // Adjust the height as needed
+            height: cardH, // Adjust the height as needed
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: items.length,
@@ -177,7 +197,7 @@ class RecommendedSection extends StatelessWidget {
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Container(
-                    width: 140, // Adjust width as needed
+                    width: cardW, // Adjust width as needed
                     decoration: BoxDecoration(
                       color: Colors.white, // White background for individual cards
                       borderRadius: BorderRadius.circular(8),
@@ -197,8 +217,8 @@ class RecommendedSection extends StatelessWidget {
                           borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
                           child: Image.network(
                             item["imageUrl"],
-                            width: 140,
-                            height: 80,
+                            width: cardW,
+                            height: imgH,
                             fit: BoxFit.cover,
                           ),
                         ),

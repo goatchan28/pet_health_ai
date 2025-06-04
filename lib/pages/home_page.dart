@@ -61,7 +61,7 @@ class _HomePageState extends State<HomePage> {
                 : null,
             ),
           ),
-          SizedBox(height: 10),
+          SizedBox(height: 10, width: 10),
         ],
       ),
       body: CustomScrollView(
@@ -71,255 +71,269 @@ class _HomePageState extends State<HomePage> {
               padding: const EdgeInsets.all(20.0),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  height: 400,
-                  color: theme.colorScheme.primaryFixedDim,
-                  child: Stack(
-                    children: [
-                      PageView(
-                        key: ValueKey(appState.selectedPet.name),
-                        controller: _pageController,
-                        onPageChanged: (index) {
-                          setState(() {
-                            currentPageHome = index; // ✅ Update state when page changes
-                          });
-                        },
-                        children: [
-                          MacrosView(pet: widget.pet),
-                          BoneHealthView(pet: widget.pet),
-                          VitaminsMineralsView(pet: widget.pet),
-                        ],
-                      ),
-                      Positioned(
-                        bottom: 10,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: List.generate(3, (index) {
-                              return Container(
-                                margin: EdgeInsets.symmetric(horizontal: 5),
-                                width: currentPageHome == index ? 12 : 8,
-                                height: currentPageHome == index ? 12 : 8,
-                                decoration: BoxDecoration(
-                                  color: currentPageHome == index ? Colors.black : Colors.grey,
-                                  shape: BoxShape.circle,
-                                ),
-                              );
-                            }),
+                child: AspectRatio(
+                  aspectRatio: 0.95,
+                  child: Container(
+                    color: theme.colorScheme.primaryFixedDim,
+                    child: Stack(
+                      children: [
+                        PageView(
+                          key: ValueKey(appState.selectedPet.name),
+                          controller: _pageController,
+                          onPageChanged: (index) {
+                            setState(() {
+                              currentPageHome = index; // ✅ Update state when page changes
+                            });
+                          },
+                          children: [
+                            MacrosView(pet: widget.pet),
+                            BoneHealthView(pet: widget.pet),
+                            VitaminsMineralsView(pet: widget.pet),
+                          ],
+                        ),
+                        Positioned(
+                          bottom: 10,
+                          left: 0,
+                          right: 0,
+                          child: Center(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(3, (index) {
+                                final dot = MediaQuery.of(context).size.width * 0.025;
+                                return Container(
+                                  margin: EdgeInsets.symmetric(horizontal: 5),      
+                                  width: currentPageHome == index ? dot * 1.5 : dot,
+                                  height: currentPageHome == index ? dot * 1.5 : dot,
+                                  decoration: BoxDecoration(
+                                    color: currentPageHome == index ? Colors.black : Colors.grey,
+                                    shape: BoxShape.circle,
+                                  ),
+                                );
+                              }),
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
           SliverToBoxAdapter(
-            child: Row(
-              children: [
-                SizedBox(height: 400, width:20),
-                Column(
-                  children: [
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(foregroundColor: theme.primaryColor, backgroundColor:theme.secondaryHeaderColor),
-                      onPressed: () => appState.changeIndex(2), 
-                      child: Text("Feed ${appState.selectedPet.name}", style:TextStyle(fontSize: 16)),
-                    ),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        height:400,
-                        width: (MediaQuery.of(context).size.width-50)/2,
-                        color: theme.colorScheme.onPrimary,
-                        child: widget.pet.mealLog!.isNotEmpty 
-                        ? ListView.builder(
-                          itemCount: widget.pet.mealLog!.length,
-                          itemBuilder: (context, index){
-                            List<Map<String, dynamic>> sortedLogs = List.from(widget.pet.mealLog!);
-                            sortedLogs = sortedLogs.reversed.toList();
-                            final log = sortedLogs[index];
-
-                            String formattedTime = log["time"];
-                            try {
-                              final dateTime = DateFormat("HH:mm").parse(log["time"]);
-                              formattedTime = DateFormat("h:mm a").format(dateTime); // ➜ 3:57 PM
-                            } catch (_) {
-                              formattedTime = log["time"]; // fallback if parsing fails
-                            }
-                            return GestureDetector(
-                              onTap: () => showProductDialog(context, 
-                                                            log["barcode"],
-                                                            log["amount"], 
-                                                            appState,
-                                                            productName : log['productName'],
-                                                            nutrition : log["nutrition"] == null
-                                                                ? null
-                                                                : Map<String, double>.from(log["nutrition"])),
-                              child: Card(
-                                margin: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                elevation: 4,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(10.0),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Center(
-                                        child: Text(
-                                          formattedTime,
-                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                          textAlign: TextAlign.center,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: LayoutBuilder(
+                builder: (context, constraints){
+                  const gap = 16.0;
+                  final screenH   = MediaQuery.of(context).size.height;
+                  final cardHeight = screenH * 0.55;
+                  final ts = MediaQuery.textScalerOf(context);
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          children: [
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(foregroundColor: theme.primaryColor, backgroundColor:theme.secondaryHeaderColor),
+                              onPressed: () => appState.changeIndex(2), 
+                              child: Text("Feed ${appState.selectedPet.name}", style:TextStyle(fontSize: ts.scale(16))),
+                            ),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                height:cardHeight,
+                                color: theme.colorScheme.onPrimary,
+                                child: widget.pet.mealLog!.isNotEmpty 
+                                ? ListView.builder(
+                                  itemCount: widget.pet.mealLog!.length,
+                                  itemBuilder: (context, index){
+                                    List<Map<String, dynamic>> sortedLogs = List.from(widget.pet.mealLog!);
+                                    sortedLogs = sortedLogs.reversed.toList();
+                                    final log = sortedLogs[index];
+                                        
+                                    String formattedTime = log["time"];
+                                    try {
+                                      final dateTime = DateFormat("HH:mm").parse(log["time"]);
+                                      formattedTime = DateFormat("h:mm a").format(dateTime); // ➜ 3:57 PM
+                                    } catch (_) {
+                                      formattedTime = log["time"]; // fallback if parsing fails
+                                    }
+                                    return GestureDetector(
+                                      onTap: () => showProductDialog(context, 
+                                                                    log["barcode"],
+                                                                    log["amount"], 
+                                                                    appState,
+                                                                    productName : log['productName'],
+                                                                    nutrition : log["nutrition"] == null
+                                                                        ? null
+                                                                        : Map<String, double>.from(log["nutrition"])),
+                                      child: Card(
+                                        margin: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                        elevation: 4,
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(10.0),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Center(
+                                                child: Text(
+                                                  formattedTime,
+                                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ),
+                                              SizedBox(height: 6),
+                                              RichText(
+                                                text: TextSpan(
+                                                  children: [
+                                                    TextSpan(
+                                                      text: "Product: ",
+                                                      style: TextStyle(
+                                                        fontSize: 15,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Colors.black, // Label color
+                                                      ),
+                                                    ),
+                                                    TextSpan(
+                                                      text: "${log["productName"]}",
+                                                      style: TextStyle(
+                                                        fontSize: 15,
+                                                        fontWeight: FontWeight.w500,
+                                                        color: theme.primaryColor, // Highlighted color
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              SizedBox(height: 4),
+                                              RichText(
+                                                text: TextSpan(
+                                                  children: [
+                                                    TextSpan(
+                                                      text: "Amount: ",
+                                                      style: TextStyle(
+                                                        fontSize: 15,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Colors.black,
+                                                      ),
+                                                    ),
+                                                    TextSpan(
+                                                      text: "${log["amount"]}",
+                                                      style: TextStyle(
+                                                        fontSize: 15,
+                                                        fontWeight: FontWeight.w500,
+                                                        color: theme.colorScheme.secondary, // A distinct color for value
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ),
-                                      SizedBox(height: 6),
-                                      RichText(
-                                        text: TextSpan(
+                                    );
+                                  }
+                                ) : Center(child: Text("No meals logged yet")),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(width:gap),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(foregroundColor: theme.primaryColor, backgroundColor: theme.secondaryHeaderColor),
+                              onPressed: online ? ()  {
+                                if (!context.read<ConnectivityService>().isOnline) {
+                                  _showOfflineMsg(context);
+                                  return;
+                                }
+                                _showExerciseLogDialog(context, widget.pet, appState);
+                                } : () => _showOfflineMsg(context), 
+                              child: Text("Log Exercise", style:TextStyle(fontSize: ts.scale(16)))
+                            ),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                height:cardHeight,
+                                color: theme.colorScheme.onPrimary,
+                                child: widget.pet.exerciseLog!.isNotEmpty 
+                                ? ListView.builder(
+                                  itemCount: widget.pet.exerciseLog!.length,
+                                  itemBuilder: (context, index){
+                                    List<Map<String, dynamic>> sortedLogs = List.from(widget.pet.exerciseLog!);
+                                    sortedLogs = sortedLogs.reversed.toList();
+                                    final log = sortedLogs[index];
+                                        
+                                    String formattedTime = log["time"];
+                                    try {
+                                      final dateTime = DateFormat("HH:mm").parse(log["time"]);
+                                      formattedTime = DateFormat("h:mm a").format(dateTime); // ➜ 3:57 PM
+                                    } catch (_) {
+                                      formattedTime = log["time"]; // fallback if parsing fails
+                                    }
+                                    return Card(
+                                      margin: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                      elevation: 4,
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(12.0),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            TextSpan(
-                                              text: "Product: ",
-                                              style: TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.black, // Label color
+                                            Center(
+                                              child: Text(
+                                                formattedTime,
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.black,
+                                                ),
+                                                textAlign: TextAlign.center,
                                               ),
                                             ),
-                                            TextSpan(
-                                              text: "${log["productName"]}",
+                                            SizedBox(height: 8),
+                                            Center(
+                                              child: Text(
+                                                "${(log["minutes"] as num).toInt()} min ${log["exerciseType"]?.toLowerCase() ?? 'exercise'}",
+                                                style: TextStyle(
+                                                  fontSize: 17,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: theme.primaryColor,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                            SizedBox(height: 6),
+                                            Text(
+                                              "🔥 Calories Burned: N/A",
                                               style: TextStyle(
                                                 fontSize: 15,
                                                 fontWeight: FontWeight.w500,
-                                                color: theme.primaryColor, // Highlighted color
+                                                color: Colors.grey[600], // subtle tone to show it's pending
                                               ),
+                                              textAlign: TextAlign.center,
                                             ),
                                           ],
                                         ),
                                       ),
-                                      SizedBox(height: 4),
-                                      RichText(
-                                        text: TextSpan(
-                                          children: [
-                                            TextSpan(
-                                              text: "Amount: ",
-                                              style: TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.black,
-                                              ),
-                                            ),
-                                            TextSpan(
-                                              text: "${log["amount"]}",
-                                              style: TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.w500,
-                                                color: theme.colorScheme.secondary, // A distinct color for value
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                                    );
+                                  }
+                                ) : Center(child: Text("No exercise logged yet")),
                               ),
-                            );
-                          }
-                        ) : Center(child: Text("No meals logged yet")),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 400, width:10),
-                Column(
-                  children: [
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(foregroundColor: theme.primaryColor, backgroundColor: theme.secondaryHeaderColor),
-                      onPressed: online ? ()  {
-                        if (!context.read<ConnectivityService>().isOnline) {
-                          _showOfflineMsg(context);
-                          return;
-                        }
-                        _showExerciseLogDialog(context, widget.pet, appState);
-                        } : () => _showOfflineMsg(context), 
-                      child: Text("Log Exercise", style:TextStyle(fontSize: 16))
-                    ),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        height:400,
-                        width: (MediaQuery.of(context).size.width-50)/2,
-                        color: theme.colorScheme.onPrimary,
-                        child: widget.pet.exerciseLog!.isNotEmpty 
-                        ? ListView.builder(
-                          itemCount: widget.pet.exerciseLog!.length,
-                          itemBuilder: (context, index){
-                            List<Map<String, dynamic>> sortedLogs = List.from(widget.pet.exerciseLog!);
-                            sortedLogs = sortedLogs.reversed.toList();
-                            final log = sortedLogs[index];
-
-                            String formattedTime = log["time"];
-                            try {
-                              final dateTime = DateFormat("HH:mm").parse(log["time"]);
-                              formattedTime = DateFormat("h:mm a").format(dateTime); // ➜ 3:57 PM
-                            } catch (_) {
-                              formattedTime = log["time"]; // fallback if parsing fails
-                            }
-                            return Card(
-                              margin: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                              elevation: 4,
-                              child: Padding(
-                                padding: const EdgeInsets.all(12.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Center(
-                                      child: Text(
-                                        formattedTime,
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.black,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                    SizedBox(height: 8),
-                                    Center(
-                                      child: Text(
-                                        "${(log["minutes"] as num).toInt()} min ${log["exerciseType"]?.toLowerCase() ?? 'exercise'}",
-                                        style: TextStyle(
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.w600,
-                                          color: theme.primaryColor,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                    SizedBox(height: 6),
-                                    Text(
-                                      "🔥 Calories Burned: N/A",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.grey[600], // subtle tone to show it's pending
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }
-                        ) : Center(child: Text("No exercise logged yet")),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 400, width:20),
-              ],
+                    ],
+                  );
+                }
+              ),
             ),
           ),
           SliverToBoxAdapter(
@@ -472,6 +486,8 @@ Future<void> showFeedDialog(BuildContext outerCtx, Pet pet, {String? selectedPro
     return Future.value();                   
   }
   var appState = outerCtx.read<MyAppState>();
+  final double panelH = (MediaQuery.sizeOf(outerCtx).height * 0.55)
+    .clamp(300.0, 600.0);   // 55 % of screen, min 300, max 600
   ScrollController scrollController = ScrollController();
   TextEditingController barcodeController = TextEditingController();
   List<String> unitOptions = ["Grams", "Cups", "Ounces"];
@@ -551,6 +567,7 @@ Future<void> showFeedDialog(BuildContext outerCtx, Pet pet, {String? selectedPro
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 5),
                           child: DropdownButtonFormField<String>(
+                            isExpanded: true,
                             value: favoriteChosen,
                             decoration: InputDecoration(
                               labelText: "Choose Favorite Food",
@@ -559,9 +576,10 @@ Future<void> showFeedDialog(BuildContext outerCtx, Pet pet, {String? selectedPro
                             items: favoriteProductNames.map((productName) {
                               return DropdownMenuItem<String>(
                                 value: productName,
-                                child: SizedBox(
-                                  width: 225,
-                                  child: Text(productName, overflow: TextOverflow.ellipsis,)
+                                child: Text(
+                                  productName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                             );
                             }).toList(),
@@ -778,7 +796,7 @@ Future<void> showFeedDialog(BuildContext outerCtx, Pet pet, {String? selectedPro
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                         SizedBox(
-                          height: 500, // ✅ FIXED: Defined height to prevent errors
+                          height: panelH, // ✅ FIXED: Defined height to prevent errors
                           child: SingleChildScrollView(
                             child: Column(
                               children: manualControllers.keys.map((key) {
@@ -906,18 +924,33 @@ class MacrosView extends StatelessWidget {
           Text("Calories Required: ${pet.calorieRequirement.toInt()}"),
           Text("Calories Eaten: ${pet.calorieIntake.toInt()}"),
           SizedBox(height: 30),
-          SizedBox(
-            width: 313,
-            height: 55,
-            child: LinearProgressIndicator(value: pet.calorieIntake / pet.calorieRequirement),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final barWidth = (constraints.maxWidth * 0.9); // optional cap
+              return Center(
+                child: FractionallySizedBox(
+                  widthFactor: 0.85,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: SizedBox(
+                      width: barWidth,
+                      height: 56,
+                      child: LinearProgressIndicator(
+                        value: pet.calorieIntake / pet.calorieRequirement,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
           SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildNutrientProgress("Protein", pet.nutritionalIntake["Crude Protein"]?.toDouble() ?? 0, pet.nutritionalRequirements["Crude Protein"]?.toDouble() ?? 1, Colors.purple),
-              _buildNutrientProgress("Carbs", pet.nutritionalIntake["Carbohydrates"]?.toDouble() ?? 0, pet.nutritionalRequirements["Carbohydrates"]?.toDouble() ?? 1, Colors.red),
-              _buildNutrientProgress("Fat", pet.nutritionalIntake["Crude Fat"]?.toDouble() ?? 0, pet.nutritionalRequirements["Crude Fat"]?.toDouble() ?? 1, Colors.yellow),
+              _buildNutrientProgress(context,"Protein", pet.nutritionalIntake["Crude Protein"]?.toDouble() ?? 0, pet.nutritionalRequirements["Crude Protein"]?.toDouble() ?? 1, Colors.purple),
+              _buildNutrientProgress(context,"Carbs", pet.nutritionalIntake["Carbohydrates"]?.toDouble() ?? 0, pet.nutritionalRequirements["Carbohydrates"]?.toDouble() ?? 1, Colors.red),
+              _buildNutrientProgress(context,"Fat", pet.nutritionalIntake["Crude Fat"]?.toDouble() ?? 0, pet.nutritionalRequirements["Crude Fat"]?.toDouble() ?? 1, Colors.yellow),
             ],
           ),
         ],
@@ -945,12 +978,12 @@ class BoneHealthView extends StatelessWidget {
                 shrinkWrap: true,
                 crossAxisCount: 3,
                 children: [
-                  _buildNutrientProgress("Calcium", pet.nutritionalIntake["Calcium"]?.toDouble() ?? 0, pet.nutritionalRequirements["Calcium"]?.toDouble() ?? 1, Colors.brown),
-                  _buildNutrientProgress("Phosphorus", pet.nutritionalIntake["Phosphorus"]?.toDouble() ?? 0, pet.nutritionalRequirements["Phosphorus"]?.toDouble() ?? 1, Colors.blue),
-                  _buildNutrientProgress("Magnesium", pet.nutritionalIntake["Magnesium"]?.toDouble() ?? 0, pet.nutritionalRequirements["Magnesium"]?.toDouble() ?? 1, Colors.orange),
-                  _buildNutrientProgress("Potassium", pet.nutritionalIntake["Potassium"]?.toDouble() ?? 0, pet.nutritionalRequirements["Potassium"]?.toDouble() ?? 1, Colors.yellow),
-                  _buildNutrientProgress("Sodium", pet.nutritionalIntake["Sodium"]?.toDouble() ?? 0, pet.nutritionalRequirements["Sodium"]?.toDouble() ?? 1, Colors.red),
-                  _buildNutrientProgress("Chloride", pet.nutritionalIntake["Chloride"]?.toDouble() ?? 0, pet.nutritionalRequirements["Chloride"]?.toDouble() ?? 1, Colors.teal),
+                  _buildNutrientProgress(context,"Calcium", pet.nutritionalIntake["Calcium"]?.toDouble() ?? 0, pet.nutritionalRequirements["Calcium"]?.toDouble() ?? 1, Colors.brown),
+                  _buildNutrientProgress(context,"Phosphorus", pet.nutritionalIntake["Phosphorus"]?.toDouble() ?? 0, pet.nutritionalRequirements["Phosphorus"]?.toDouble() ?? 1, Colors.blue),
+                  _buildNutrientProgress(context,"Magnesium", pet.nutritionalIntake["Magnesium"]?.toDouble() ?? 0, pet.nutritionalRequirements["Magnesium"]?.toDouble() ?? 1, Colors.orange),
+                  _buildNutrientProgress(context,"Potassium", pet.nutritionalIntake["Potassium"]?.toDouble() ?? 0, pet.nutritionalRequirements["Potassium"]?.toDouble() ?? 1, Colors.yellow),
+                  _buildNutrientProgress(context,"Sodium", pet.nutritionalIntake["Sodium"]?.toDouble() ?? 0, pet.nutritionalRequirements["Sodium"]?.toDouble() ?? 1, Colors.red),
+                  _buildNutrientProgress(context,"Chloride", pet.nutritionalIntake["Chloride"]?.toDouble() ?? 0, pet.nutritionalRequirements["Chloride"]?.toDouble() ?? 1, Colors.teal),
                 ],
               ),
             ],
@@ -986,12 +1019,12 @@ class VitaminsMineralsView extends StatelessWidget {
               shrinkWrap: true,
               crossAxisCount: 3,
               children: [
-                _buildNutrientProgress("Iron", pet.nutritionalIntake["Iron"]?.toDouble() ?? 0, pet.nutritionalRequirements["Iron"]?.toDouble() ?? 1, Colors.blueGrey),
-                _buildNutrientProgress("Zinc", pet.nutritionalIntake["Zinc"]?.toDouble() ?? 0, pet.nutritionalRequirements["Zinc"]?.toDouble() ?? 1, Colors.purple),
-                _buildNutrientProgress("Vitamin A", pet.nutritionalIntake["Vitamin A"]?.toDouble() ?? 0, pet.nutritionalRequirements["Vitamin A"]?.toDouble() ?? 1, Colors.brown),
-                _buildNutrientProgress("Vitamin D", pet.nutritionalIntake["Vitamin D"]?.toDouble() ?? 0, pet.nutritionalRequirements["Vitamin D"]?.toDouble() ?? 1, Colors.yellow),
-                _buildNutrientProgress("Vitamin E", pet.nutritionalIntake["Vitamin E"]?.toDouble() ?? 0, pet.nutritionalRequirements["Vitamin E"]?.toDouble() ?? 1, Colors.pink),
-                _buildNutrientProgress("Choline", pet.nutritionalIntake["Choline"]?.toDouble() ?? 0, pet.nutritionalRequirements["Choline"]?.toDouble() ?? 1, Colors.teal),
+                _buildNutrientProgress(context, "Iron", pet.nutritionalIntake["Iron"]?.toDouble() ?? 0, pet.nutritionalRequirements["Iron"]?.toDouble() ?? 1, Colors.blueGrey),
+                _buildNutrientProgress(context,"Zinc", pet.nutritionalIntake["Zinc"]?.toDouble() ?? 0, pet.nutritionalRequirements["Zinc"]?.toDouble() ?? 1, Colors.purple),
+                _buildNutrientProgress(context,"Vitamin A", pet.nutritionalIntake["Vitamin A"]?.toDouble() ?? 0, pet.nutritionalRequirements["Vitamin A"]?.toDouble() ?? 1, Colors.brown),
+                _buildNutrientProgress(context,"Vitamin D", pet.nutritionalIntake["Vitamin D"]?.toDouble() ?? 0, pet.nutritionalRequirements["Vitamin D"]?.toDouble() ?? 1, Colors.yellow),
+                _buildNutrientProgress(context,"Vitamin E", pet.nutritionalIntake["Vitamin E"]?.toDouble() ?? 0, pet.nutritionalRequirements["Vitamin E"]?.toDouble() ?? 1, Colors.pink),
+                _buildNutrientProgress(context,"Choline", pet.nutritionalIntake["Choline"]?.toDouble() ?? 0, pet.nutritionalRequirements["Choline"]?.toDouble() ?? 1, Colors.teal),
               ],
             ),
           ],
@@ -1009,7 +1042,7 @@ class VitaminsMineralsView extends StatelessWidget {
   }
 }
 
-Widget _buildNutrientProgress(String label, double current, double total, Color color) {
+Widget _buildNutrientProgress(BuildContext context, String label, double current, double total, Color color) {
   // ✅ Prevent division by zero
   double progress = (total > 0) ? current / total : 0.0;
 
@@ -1033,11 +1066,14 @@ Widget _buildNutrientProgress(String label, double current, double total, Color 
     formattedTotal = total.toStringAsFixed(2);
   }
 
+  final double d = (MediaQuery.of(context).size.width * 0.20).clamp(60, 120);
+
+
   return Column(
     children: [
       SizedBox(
-        width: 80,
-        height: 80,
+        width: d,
+        height: d,
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -1062,6 +1098,8 @@ Widget _buildNutrientProgress(String label, double current, double total, Color 
 }
 
 void _showMoreNutrientsPage(BuildContext context, Pet pet){
+  final double dialogH = (MediaQuery.sizeOf(context).height * 0.70)
+    .clamp(300.0, 600.0);  
   showDialog(
     context: context, 
     builder: (context){
@@ -1069,7 +1107,7 @@ void _showMoreNutrientsPage(BuildContext context, Pet pet){
         title: Text("All Nutrient Info"),
         content: SizedBox(
           width: double.maxFinite,
-          height: 500,
+          height: dialogH,
           child: Column(
             children: [
               Expanded(
@@ -1174,7 +1212,7 @@ Future<void> showProductDialog(BuildContext context,
                       icon: Icon(
                         isFavorite ? Icons.star : Icons.star_border,
                         color: Colors.amber,
-                        size: 50, // Gold color for the star
+                        size: (MediaQuery.sizeOf(context).width * 0.10).clamp(32.0, 60.0),
                       ),
                       onPressed: online ? ()  {
                         setDialogState(() {

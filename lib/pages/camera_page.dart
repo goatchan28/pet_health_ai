@@ -113,6 +113,12 @@ class _QRScannerViewState extends State<QRScannerView> {
 
   @override
   Widget build(BuildContext context) {
+    final sz = MediaQuery.sizeOf(context);
+    final ts = MediaQuery.textScalerOf(context);
+    final double boxW = (sz.shortestSide * 0.75).clamp(220.0, 380.0);
+    final double boxH = boxW * 0.8;                   // preserves old 300×250 look
+    final double iconS = (sz.width * 0.07).clamp(24.0, 34.0);
+
     return Scaffold(
       body: Stack(
         children: [
@@ -164,7 +170,7 @@ class _QRScannerViewState extends State<QRScannerView> {
                       ),
                       actions: [
                         TextButton(
-                          onPressed: () => {Navigator.pop(_, false), controller.start(), _busy = false}, // “No”
+                          onPressed: () => {Navigator.pop(_, false)}, // “No”
                           child: const Text('No'),
                         ),
                         TextButton(
@@ -175,6 +181,11 @@ class _QRScannerViewState extends State<QRScannerView> {
                     ),
                   ) ??
                   false; // returns null if dialog is dismissed some other way
+                  if (!confirmed) {
+                    _busy = false;                     // 🔓 clear the flag
+                    widget.goToNormalCamera(barcode);  // ➜ switch to manual-photo page
+                    return;                            // ⏹ don’t run the feed dialog
+                  }
                   _busy = false;
                   if (!mounted) return;
 
@@ -236,8 +247,8 @@ class _QRScannerViewState extends State<QRScannerView> {
           // Overlay Scanner Box
           Center(
             child: Container(
-              width: 300,
-              height: 250,
+              width: boxW,
+              height: boxH,
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.white, width: 2),
                 borderRadius: BorderRadius.circular(16),
@@ -247,26 +258,30 @@ class _QRScannerViewState extends State<QRScannerView> {
 
           // Torch toggle button
           Positioned(
-            top: 60,
-            right: 20,
+            top: sz.height * 0.07,
+            right: sz.width * 0.05,
             child: IconButton(
-              icon: const Icon(Icons.flashlight_on, color: Colors.white, size: 30),
+              icon: Icon(Icons.flashlight_on, color: Colors.white, size: iconS),
               onPressed: () {
                 controller.toggleTorch();
               },
             ),
           ),
           Positioned(
-            bottom: 40,
-            left: 20,
+            bottom: sz.height * 0.05,
+            left: sz.width * 0.04,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.black45,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: EdgeInsets.symmetric(horizontal: sz.width * 0.025, vertical: sz.height * 0.01),
               ),
-              icon: Image.asset("assets/images/sigmalogo.png", width: 30, height: 30, fit: BoxFit.cover),
-              label: const Text('Feed'),
+              icon: SizedBox(
+                width: iconS * 1.5,
+                height: iconS * 1.5,
+                child: LogoIcon()
+              ),
+              label: Text('Feed' ,style: TextStyle(fontSize: ts.scale(15).clamp(12.0, 22.0))),
               onPressed: () async {
                 if (_busy) return;              // ignore while dialog/scan busy
                 _busy = true;
@@ -345,7 +360,16 @@ class _NormalCameraViewState extends State<NormalCameraView> {
   }
   
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) {final sz = MediaQuery.sizeOf(context);
+    final ts = MediaQuery.textScalerOf(context);
+
+    // shutter button
+    final double shutter = (sz.shortestSide * 0.17).clamp(64.0, 90.0);
+    final double iconS   = shutter * 0.45;          // ~36 → 40 px
+
+    // “Take FRONT/BACK …” banner
+    final double bannerTop = sz.height * 0.07;
+
     if (widget.barcode.isEmpty) {
       return Scaffold(
         appBar: AppBar(),
@@ -353,11 +377,11 @@ class _NormalCameraViewState extends State<NormalCameraView> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.qr_code_2, size: 80, color: Colors.grey),
+              Icon(Icons.qr_code_2, size: iconS*3, color: Colors.grey),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'Please scan a barcode first.',
-                style: TextStyle(fontSize: 18),
+                style: TextStyle(fontSize: ts.scale(18)),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
@@ -431,9 +455,9 @@ class _NormalCameraViewState extends State<NormalCameraView> {
                         }
                       },
                       icon: _isUploading
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
+                        ? SizedBox(
+                            width: iconS,
+                            height: iconS,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.check),
@@ -448,7 +472,7 @@ class _NormalCameraViewState extends State<NormalCameraView> {
             children: [
               CameraPreview(_controller),         // full‑screen preview
               Positioned(
-                top: 60,
+                top: bannerTop,
                 left: 0,
                 right: 0,
                 child: Center(                    // small on‑screen hint
@@ -463,7 +487,7 @@ class _NormalCameraViewState extends State<NormalCameraView> {
                       _stage == CaptureStage.front
                           ? 'Take FRONT of package'
                           : 'Take GUARANTEED ANALYSIS and CALORIE CONTENT(BACK of package)',
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: Colors.white, fontSize: ts.scale(16).clamp(11.0, 20.0)),
                     ),
                   ),
                 ),
@@ -481,10 +505,10 @@ class _NormalCameraViewState extends State<NormalCameraView> {
             color: Theme.of(context).colorScheme.primary,
             child: InkWell(
               onTap: _stage == CaptureStage.done ? null : _takeShot,
-              child: const SizedBox(
-                width: 80,
-                height: 80,
-                child: Icon(Icons.camera_alt, size: 36, color: Colors.white),
+              child: SizedBox(
+                width: shutter*1.25,
+                height: shutter*1.25,
+                child: Icon(Icons.camera_alt, size: iconS*1.25, color: Colors.white),
               ),
             ),
           ),
@@ -623,7 +647,6 @@ class _ReviewFormState extends State<_ReviewForm> {
   Map<String, TextEditingController>? _gaCtrls;    // guaranteed‑analysis inputs
   Set<String> _missing = {};
   String? _imageUrl;
-
 
   void _initControllers(Map<String, dynamic> food) {
     _missing =
@@ -766,7 +789,24 @@ class _ReviewFormState extends State<_ReviewForm> {
   /* ─────────────────── UI builders ─────────────────── */
 
   Widget _buildForm() {
-    final missingStyle = TextStyle(color: Colors.orange.shade700);
+    final sz = MediaQuery.sizeOf(context);    
+    final ts = MediaQuery.textScalerOf(context);
+    final missingStyle = TextStyle(
+      color: Colors.orange.shade700,
+      fontSize: ts.scale(13).clamp(10.0, 16.0)
+    );
+
+    InputDecoration _dec([String? suffix]) => InputDecoration(
+        suffixText: suffix,
+        labelStyle: TextStyle(
+          fontSize: ts.scale(14).clamp(11.0, 18.0),
+        ),
+      );
+
+    TextStyle hdrStyle() => TextStyle(
+          fontSize: ts.scale(18).clamp(14.0, 22.0),
+          fontWeight: FontWeight.bold,
+        );
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -782,38 +822,48 @@ class _ReviewFormState extends State<_ReviewForm> {
               ),
             )
           else
-            const SizedBox(
-              height: 200,
-              child: Center(child: CircularProgressIndicator()),
+            SizedBox(
+              height: sz.width * 0.55,
+              child: const Center(child: CircularProgressIndicator()),
             ),
           const SizedBox(height: 16),
 
           // ---------- basic info ----------
-          const Text('Basic info',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Text('Basic info',
+              style: hdrStyle()),
           const SizedBox(height: 8),
           for (final k in _topCtrls!.keys) ...[
             Row(
               children: [
-                Expanded(child: Text(k)),
+                Expanded(child: Text(k, style: TextStyle(fontSize: ts.scale(15).clamp(12.0, 19.0)),)),
                 if (_missing.contains(k))
                   Text('(missing)', style: missingStyle),
               ],
             ),
-            TextField(controller: _topCtrls![k]),
+            TextField(controller: _topCtrls![k],
+              style: TextStyle(fontSize: ts.scale(16).clamp(12.0, 20.0)),
+              decoration: _dec(),
+            ),
             const SizedBox(height: 12),
           ],
 
           // ---------- guaranteed analysis ----------
           if (_gaCtrls!.isNotEmpty) ...[
             const Divider(height: 32),
-            const Text('Guaranteed analysis (per 100 g)',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text('Guaranteed analysis (per 100 g)',
+                style: hdrStyle()),
             const SizedBox(height: 8),
             for (final k in _gaCtrls!.keys) ...[
               Row(
                 children: [
-                  Expanded(child: Text(k)),
+                  Expanded(
+                    child: Text(
+                      k,
+                      style: TextStyle(
+                          fontSize: ts.scale(15).clamp(12.0, 19.0),
+                        ),
+                    )
+                  ),
                   if (_missing.contains(k))
                     Text('(missing)', style: missingStyle),
                 ],
@@ -821,7 +871,8 @@ class _ReviewFormState extends State<_ReviewForm> {
               TextField(
                 controller: _gaCtrls![k],
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(suffixText: '%'),
+                style: TextStyle(fontSize: ts.scale(16).clamp(12.0, 20.0)),
+                decoration: _dec('%'),
               ),
               const SizedBox(height: 12),
             ],

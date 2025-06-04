@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:pet_health_ai/main.dart';
 import 'pet.dart';
 import 'dart:convert';
 import "package:shared_preferences/shared_preferences.dart";
@@ -309,9 +310,22 @@ class MyAppState extends ChangeNotifier {
       final savedPhotoURL = prefs.getString("profileImageUrl");
       final currentPhotoURL = savedPhotoURL ?? user.photoURL;
       await user.updateProfile(displayName: name, photoURL: currentPhotoURL);
+      await FirebaseFirestore.instance
+        .collection('users')          // ⬅️ one document per uid
+        .doc(user.uid)
+        .set({'name': name}, SetOptions(merge: true));
     }
     notifyListeners();
   }
+
+    /// Fetch each uid’s public profile doc and return the names
+  Future<List<String>> fetchNames(List<String> uids) async {
+    final col = FirebaseFirestore.instance.collection('users');
+    final snaps = await Future.wait(uids.map((uid) => col.doc(uid).get()));
+
+    return snaps.map((s) => s.data()?['name'] as String? ?? 'Unknown').toList();
+  }
+
 
   void changeIndex(int idx){
     currentPageIndex = idx;
@@ -448,9 +462,9 @@ class MyAppState extends ChangeNotifier {
         List<dynamic> ownerUIDs = docSnapshot.data()?["ownerUID"] ?? [];
         // If the document exists, update the ownerUID array
         if (!ownerUIDs.contains(uid)) {
-          // If the uid is not already in the ownerUID array, add it
+          ownerUIDs.add(uid);
           await docRef.update({
-            "ownerUID": FieldValue.arrayUnion([uid]),
+            "ownerUID": ownerUIDs,
           });
           print("✅ Owner UID added successfully to pet $desiredPetID");
         } else {
@@ -482,20 +496,29 @@ class MyAppState extends ChangeNotifier {
     List<dynamic> ownerUIDs = docSnapshot.data()?["ownerUID"] ?? [];
 
     if (ownerUIDs.contains(uid)) {
-      await docRef.update({
-        "ownerUID": FieldValue.arrayRemove([uid]),
-      });
-
-      print("✅ Removed UID $uid from pet ${pet.id}");
+      if (ownerUIDs.length == 1 && ownerUIDs.first == uid) {
+        await docRef.delete();
+        print("🗑️  Pet ${pet.id} deleted (no owners left)");
+      } else {
+        await docRef.update({
+          "ownerUID": FieldValue.arrayRemove([uid]),
+        });
+      }
 
       pets.removeWhere((p) => p.id == pet.id);
 
       if (pets.isEmpty) {
         pets = [defaultPet];
+        petIndex = 0;
+      } else if (petIndex >=pets.length){
+        petIndex = pets.length - 1;
       }
 
       await updateLocalPetData();
       notifyListeners();
+    }
+    else{
+      return;
     }
   }
 
@@ -546,6 +569,11 @@ class MyAppState extends ChangeNotifier {
 
         if (snapshot.docs.isNotEmpty){
           pets = snapshot.docs.map((doc) => Pet.fromJson(doc.data(), doc.id)).toList();
+          if (petAdded) {
+            petIndex = pets.length - 1;   
+          } else if (petIndex >= pets.length) {
+            petIndex = 0;             
+          }
           await prefs.setString("pets", jsonEncode(pets.map((pet) => pet.toJson()).toList()));
           notifyListeners();
         }
@@ -1060,12 +1088,23 @@ void printSharedPreferences() {
       }
 
       final doc = query.docs.first.reference;
+      final docID = doc.id;
 
       String? imageUrl = originalPet.imageUrl;
       if (imageFile != null) {
-        final ref = FirebaseStorage.instance
-            .ref()
-            .child("pets/${uid}_${DateTime.now().millisecondsSinceEpoch}.jpg");
+        final storage = FirebaseStorage.instance;
+
+        // 2a. Delete previous image (if any)
+        if (imageUrl?.isNotEmpty == true) {
+          try {
+            await storage.refFromURL(imageUrl!).delete();
+          } catch (e) {
+            debugPrint('⚠️  Could not delete old pet photo: $e');
+          }
+        }
+
+        // 2b. Upload the new one *to the same deterministic path*
+        final ref = storage.ref().child('pets/$docID.jpg');
         await ref.putFile(imageFile);
         imageUrl = await ref.getDownloadURL();
       }
@@ -1111,14 +1150,13 @@ void printSharedPreferences() {
       busy = true;   notifyListeners();            // start spinner
       try {
         final result = await task();                // await your work
-        if (ctx.mounted) {ScaffoldMessenger.of(ctx).showSnackBar(
-          SnackBar(content: Text(successMsg, style: TextStyle(fontSize: 16),), backgroundColor: Colors.green),
-        );}
+        showGlobalSnackBar(successMsg, bg: Colors.green);
         return result;
       } catch (e) {
-        if (ctx.mounted) {ScaffoldMessenger.of(ctx).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-        );}
+        final msg = e is FirebaseAuthException      // nicer message for auth
+            ? (e.message ?? e.code)
+            : e.toString();
+        showGlobalSnackBar(msg, bg: Colors.red);
         rethrow;
       } finally {
         busy = false;  notifyListeners();          // stop spinner

@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:pet_health_ai/main.dart';
 import 'package:pet_health_ai/models/app_state.dart';
@@ -21,7 +20,6 @@ class EnterNamePage extends StatefulWidget {
 
 class _EnterNamePageState extends State<EnterNamePage> {
   final nameController = TextEditingController();
-  bool _saving = false; 
 
   @override
   void dispose() {
@@ -31,35 +29,27 @@ class _EnterNamePageState extends State<EnterNamePage> {
 
   Future<void> _submitName() async {
     final online = context.read<ConnectivityService>().isOnline;
-    var appState = context.read<MyAppState>();
     if (!online) {
       _showOfflineMsg(context);
       return;
     }
+    final appState = context.read<MyAppState>();
     final name = nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Please enter a name')));
+      showGlobalSnackBar('Please enter a name', bg: Colors.red);
       return;
     }
 
-    setState(() => _saving = true);                     // lock UI
-
-    try {
-      await appState.setName(name);                     // <-- network write
-      if (!mounted) return;
-      await showAddPetDialog(context);                  // has its own guard
-      appState.setNeedsToEnterName(false);
-    } on FirebaseException catch (e) {
-      // lost connection or other Firebase error
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message ?? 'Network error; try again.')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);     // unlock UI
-    }
+    await appState.run(
+      context,
+      () async {
+        await appState.setName(name);  
+        if (!mounted) return;              
+        await showAddPetDialog(context, firstTime: true);                
+        appState.setNeedsToEnterName(false);
+      },
+      successMsg: 'Nice to meet you, $name!'
+    );
   }
 
   @override
@@ -78,12 +68,8 @@ class _EnterNamePageState extends State<EnterNamePage> {
             ),
             SizedBox(height: 20),
             ElevatedButton(
-              onPressed: (!isOnline || _saving) ? null : _submitName,
-              child: _saving
-                  ? const SizedBox(
-                      width: 20, height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Continue'),
+              onPressed: (!isOnline) ? null : _submitName,
+              child: const Text('Continue'),
             ),
           ],
         ),

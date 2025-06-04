@@ -23,6 +23,13 @@ class ProgressTrackerPage extends StatefulWidget {
 class _ProgressTrackerPageState extends State<ProgressTrackerPage> {
   @override
   Widget build(BuildContext context) {
+
+    final size   = MediaQuery.sizeOf(context);
+    final double vGapLarge  = (size.height * 0.07).clamp(40.0, 120.0);  // ~7 % screen-height
+    final double vGapSmall  = (size.height * 0.035).clamp(12.0, 40.0);  // ~3.5 %
+    final double weeklyH    = (size.height * 0.30).clamp(200.0, 400.0); // graph 30 % of height
+    final double visitsH    = (size.height * 0.25).clamp(160.0, 350.0); // graph 25 %
+
     return Scaffold(
       appBar: AppBar(     
         centerTitle: true,
@@ -34,21 +41,21 @@ class _ProgressTrackerPageState extends State<ProgressTrackerPage> {
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
-              child: SizedBox(height: 60),
+              child: SizedBox(height: vGapLarge),
             ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: WeeklyNutrientGraph(width: double.infinity, height: 273, pet: widget.pet)
+              child: WeeklyNutrientGraph(width: double.infinity, height: weeklyH, pet: widget.pet)
             ),
           ),
           SliverToBoxAdapter(
-              child: SizedBox(height: 21),
+              child: SizedBox(height: vGapSmall),
             ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: VetVistsChart(width: double.infinity,height: 200, pet: widget.pet),
+              child: VetVistsChart(width: double.infinity,height: visitsH, pet: widget.pet),
               // child: ClipRRect(
               //   borderRadius: BorderRadius.circular(10),
               //   child: Container(

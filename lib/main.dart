@@ -4,6 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:pet_health_ai/extras/feedback.dart';
 import 'package:pet_health_ai/firebase_options.dart';
 import 'package:pet_health_ai/pages/login_page.dart';
 import 'package:pet_health_ai/pages/name_page.dart';
@@ -17,6 +18,13 @@ import 'package:pet_health_ai/pages/progress_page.dart';
 import 'package:pet_health_ai/pages/camera_page.dart';
 import 'package:pet_health_ai/pages/food_page.dart';
 import 'package:pet_health_ai/pages/profile_page.dart';
+
+final rootMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
+void showGlobalSnackBar(String msg, {Color? bg}) =>
+  rootMessengerKey.currentState?.showSnackBar(
+    SnackBar(content: Text(msg), backgroundColor: bg),
+  );
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -122,6 +130,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+        scaffoldMessengerKey: rootMessengerKey,
         title: 'Pet Health AI',
         theme: ThemeData(
           useMaterial3: true,
@@ -166,6 +175,9 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
+    final bool isWide =
+      MediaQuery.orientationOf(context) == Orientation.landscape;
+
     var appState = context.watch<MyAppState>();
 
     print("🔄 UI Rebuilt - Current SharedPreferences:");
@@ -204,41 +216,79 @@ class _MyHomePageState extends State<MyHomePage> {
       default:
         throw UnimplementedError('No widget for selectedIndex: ${appState.currentPageIndex}');
     }
+    final destinations = [
+      NavigationDestination(icon: LogoIcon(),               label: ''),
+      NavigationDestination(icon: Icon(Icons.track_changes),label: 'Progress'),
+      NavigationDestination(icon: Icon(Icons.camera),       label: 'Camera'),
+      NavigationDestination(icon: Icon(Icons.rice_bowl),    label: 'Food'),
+      NavigationDestination(icon: Icon(Icons.person),       label: 'Profile'),
+    ];
+    final navBar = NavigationBar(
+      destinations: destinations,
+      selectedIndex: appState.currentPageIndex,
+      onDestinationSelected: appState.changeIndex,
+    );
     return BusyOverlay(
       child: ConnectivityBanner(
         child: Scaffold(
-          body: Container(
+          floatingActionButton: appState.currentPageIndex == 0
+          ? FloatingActionButton.extended(
+              heroTag: 'feedback',
+              label: const Text('Feedback'),
+              icon: const Icon(Icons.feedback_outlined),
+              onPressed: () {
+                final online = context.read<ConnectivityService>().isOnline;
+                if (!online) {
+                  showGlobalSnackBar(                       // same helper you use elsewhere
+                    'Connect to the internet to send feedback.',
+                    bg: Colors.redAccent,
+                  );
+                  return;
+                }
+                showFeedbackDialog(context);                // ← actual dialog
+              },
+            )
+          : null,
+          body: isWide
+            ? Row(
+              children: [
+                NavigationRailTheme(
+                  data: const NavigationRailThemeData(
+                    minWidth: 56,
+                    groupAlignment: -1.0
+                  ),
+                  child: Theme(
+                    data: Theme.of(context).copyWith(
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: NavigationRail(
+                      selectedIndex: appState.currentPageIndex,
+                      onDestinationSelected: appState.changeIndex, 
+                      labelType: NavigationRailLabelType.all,
+                      destinations: destinations
+                          .map((d) => NavigationRailDestination(
+                                icon: d.icon,
+                                label: Text(d.label),
+                                padding: const EdgeInsets.symmetric(vertical: 2)
+                              ))
+                          .toList(),
+                    ),
+                  ),
+                ),
+                  const VerticalDivider(width: 1),
+                  Expanded(
+                    child: Container(
+                      color: Theme.of(context).colorScheme.primary,
+                      child: page,
+                    ),
+                  ),
+              ],
+            )
+          : Container(
             color: Theme.of(context).colorScheme.primary,
             child: page,
           ),
-          bottomNavigationBar: NavigationBar(
-            destinations: [
-              NavigationDestination(
-                icon: Image.asset("assets/images/sigmalogo.png", width: 88, height: 88, fit: BoxFit.cover,), 
-                label: '',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.track_changes), 
-                label: 'Progress',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.camera), 
-                label: 'Camera',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.rice_bowl), 
-                label: 'Food',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.person), 
-                label: 'Profile',
-              ),
-            ],
-            selectedIndex: appState.currentPageIndex, 
-            onDestinationSelected: (value){
-                appState.changeIndex(value);
-            },
-          ),
+          bottomNavigationBar:isWide ? null : navBar,
         ),
       ),
     );
@@ -271,6 +321,25 @@ class _EnterAccountPageState extends State<EnterAccountPage>{
       body: Container(
         color: Theme.of(context).colorScheme.primary,
         child: page,
+      ),
+    );
+  }
+}
+
+class LogoIcon extends StatelessWidget {
+  const LogoIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (_, c) => Padding(
+        padding: const EdgeInsets.all(4),
+        child: Image.asset(
+          'assets/images/sigmalogo.png',
+          fit: BoxFit.contain,
+          height: c.maxHeight * 0.9,
+          width:  c.maxWidth  * 0.8,
+        ),
       ),
     );
   }

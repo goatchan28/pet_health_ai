@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_cropper/image_cropper.dart';
@@ -25,6 +27,10 @@ class ProfilePage extends StatelessWidget {
     var appState = context.watch<MyAppState>();
     final online = context.read<ConnectivityService>().isOnline;
     final bool showPhoto = online && appState.profileImageUrl != null;
+    final double avatarR = (MediaQuery.sizeOf(context).width * 0.12).clamp(36.0, 64.0);
+    final ts = MediaQuery.textScalerOf(context);
+    final double w = (MediaQuery.sizeOf(context).width * 0.18)    // 18 % of width
+                    .clamp(48.0, 90.0);   
 
     return Scaffold(
       body: Padding(
@@ -34,11 +40,11 @@ class ProfilePage extends StatelessWidget {
               Center(
                 child: Column(
                   children: [
-                    SizedBox(height: 70),
+                    SizedBox(height: avatarR),
                     Stack(
                       children: [
                         CircleAvatar(
-                          radius: 40,
+                          radius: (MediaQuery.sizeOf(context).width * 0.12).clamp(36.0, 64.0),
                           backgroundColor: Colors.green,
                           foregroundImage: showPhoto
                               ? NetworkImage(appState.profileImageUrl!)
@@ -99,14 +105,14 @@ class ProfilePage extends StatelessWidget {
                         ),
                       ],
                     ),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     Text(
                       appState.name,
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontSize: ts.scale(24).clamp(16.0, 30.0), fontWeight: FontWeight.bold),
                     ),
                     Text(
                       'Member Since: ${appState.memberSince ?? "Unknown"}',
-                      style: TextStyle(color: Colors.grey),
+                      style: TextStyle(fontSize: ts.scale(14), color: Colors.grey),
                     ),
                   ],
                 ),
@@ -114,11 +120,15 @@ class ProfilePage extends StatelessWidget {
               SizedBox(height: 20),
               Row(
                 children: [
-                  Image.asset("assets/images/sigmalogo.png", width: 75, height: 75,fit: BoxFit.contain),
+                  SizedBox(
+                    width: w,
+                    height: w,
+                    child: LogoIcon()
+                  ),
                   SizedBox(width: 8),
                   Text(
                     'Your Pets',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: ts.scale(20).clamp(14.0, 24.0), fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -185,7 +195,7 @@ class ProfilePage extends StatelessWidget {
   }
 }
 
-Future<void> showAddPetDialog(BuildContext context) async {
+Future<void> showAddPetDialog(BuildContext context, {bool firstTime = false}) async {
   var appState = context.read<MyAppState>();
   final online   = context.read<ConnectivityService>().isOnline;
   if (!online) {                 // early exit
@@ -201,26 +211,26 @@ Future<void> showAddPetDialog(BuildContext context) async {
   Map<String, TextEditingController> controllers = {
     "Name": TextEditingController(),
     "Breed": TextEditingController(),
-    "Weight": TextEditingController(),
-    "Age": TextEditingController(),
+    "Weight (kg)": TextEditingController(),
+    "Age (months)": TextEditingController(),
     "Neutered/Spayed (true/false)": TextEditingController(),
   };
 
   Map<String, String?> errors = {
     "Name": null,
     "Breed": null,
-    "Weight": null,
-    "Age": null,
+    "Weight (kg)": null,
+    "Age (months)": null,
     "Neutered/Spayed (true/false)": null,
   };
 
-  void validateAndSubmit() {
+  Future<void> validateAndSubmit() async {
     errors.updateAll((key, value) => null); // Reset errors
 
     String name = controllers["Name"]!.text.trim();
     String breed = controllers["Breed"]!.text.trim();
-    double? weight = double.tryParse(controllers["Weight"]!.text); // Nullable double
-    double? age = double.tryParse(controllers["Age"]!.text);   // Nullable double
+    double? weight = double.tryParse(controllers["Weight (kg)"]!.text); // Nullable double
+    double? age = double.tryParse(controllers["Age (months)"]!.text);   // Nullable double
     String neuteredText = controllers["Neutered/Spayed (true/false)"]!.text.trim().toLowerCase();
     bool? neuteredSpayed = (neuteredText == "true") ? true : (neuteredText == "false") ? false : null;
 
@@ -252,10 +262,10 @@ Future<void> showAddPetDialog(BuildContext context) async {
       return;
     }
 
-    appState.run(
+    await appState.run(
       context,                                   // use the long-lived page ctx
       () async {
-        appState.addPetManually(
+        await appState.addPetManually(
           name: name,
           breed: breed,
           weight: weight!,
@@ -268,7 +278,10 @@ Future<void> showAddPetDialog(BuildContext context) async {
       },
       successMsg: '$name added sucessfully!',                   // or any custom text
     );
+    final Pet newPet = appState.pets.last;
+    if (!context.mounted) return;
     Navigator.pop(context);
+    await showPetSummaryDialog(context, newPet);
   }
 
   await showDialog(
@@ -282,6 +295,18 @@ Future<void> showAddPetDialog(BuildContext context) async {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (firstTime)                 // ← show once
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        "👋  Welcome!  You can attach an **existing pet** with its ID, "
+                        "or enter your pet’s details manually. "
+                        "You can always add pets later from the Profile page.",
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ),
+                  if (firstTime) const Divider(),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -326,7 +351,7 @@ Future<void> showAddPetDialog(BuildContext context) async {
                       children: [
                         const Text("Enter Your Dog's Information", style: TextStyle(fontWeight: FontWeight.bold)),
                         SizedBox(
-                          height: 400,
+                          height: (MediaQuery.sizeOf(context).height * 0.50).clamp(280.0, 500.0),
                           child: SingleChildScrollView(
                             child: Column(
                               children: [
@@ -335,7 +360,7 @@ Future<void> showAddPetDialog(BuildContext context) async {
                                   padding: const EdgeInsets.symmetric(vertical: 5),
                                   child: TextField(
                                     controller: controllers[key],
-                                    keyboardType: (key.contains("Weight") || key.contains("Age"))
+                                    keyboardType: (key.contains("Weight (kg)") || key.contains("Age (months)"))
                                         ? TextInputType.number
                                         : TextInputType.text,
                                     decoration: InputDecoration(
@@ -362,7 +387,7 @@ Future<void> showAddPetDialog(BuildContext context) async {
                 child: Text("Cancel"),
               ),
               ElevatedButton(
-                onPressed: () {
+                onPressed: () async {
                   if (!context.read<ConnectivityService>().isOnline) {
                     _showOfflineMsg(context);
                     return;
@@ -373,7 +398,28 @@ Future<void> showAddPetDialog(BuildContext context) async {
                       print("Please enter a Pet ID");
                       return;
                     }
-                    appState.addPetID(desiredPetID);
+                    await appState.run(
+                      context,
+                      () async => await appState.addPetID(desiredPetID),
+                    );
+                    final Pet linked = appState.pets.firstWhere((p) => p.id == desiredPetID);
+                    showGlobalSnackBar('${linked.name} successfully linked!',
+                      bg: Colors.green);
+
+                    final doc = await FirebaseFirestore.instance
+                        .collection('pets')
+                        .doc(desiredPetID)
+                        .get();
+
+                    final List<String> ownerUids =
+                        List<String>.from(doc['ownerUID'] ?? const []);
+
+                    // remove *this* user’s UID before displaying
+                    ownerUids.remove(FirebaseAuth.instance.currentUser!.uid);
+                    final otherOwnerNames = await appState.fetchNames(ownerUids);
+                    if (!context.mounted) return;
+                    await showPetSummaryDialog(context, linked, otherOwners: otherOwnerNames);
+                    if (!context.mounted) return;
                     Navigator.pop(context);
                   }
                   if (mode==1){
@@ -518,7 +564,7 @@ class _EditPetDialogState extends State<EditPetDialog> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: CircleAvatar(
-                  radius: 40,
+                  radius: (MediaQuery.sizeOf(context).width * 0.12).clamp(32.0, 56.0),
                   backgroundImage: newImageFile != null
                       ? FileImage(newImageFile!)
                       : showNetImage
@@ -528,7 +574,7 @@ class _EditPetDialogState extends State<EditPetDialog> {
               ),
             TextButton.icon(
               icon: const Icon(Icons.image),
-              label: const Text("Change Profile Picture"),
+              label: const Text("Change Pet Picture"),
               onPressed: () async {
                 final onlineNow = context.read<ConnectivityService>().isOnline;
                 if (!onlineNow) { _showOfflineMsg(context); return; }
@@ -588,12 +634,14 @@ class PetProfileCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool online      = context.watch<ConnectivityService>().isOnline;
     final bool hasPhotoUrl = pet.imageUrl != null && online;
+    final ts = MediaQuery.textScalerOf(context);
+
 
     return GestureDetector(
       onTap: onTap, // This will handle taps to show more details
       child: Container(
         padding: EdgeInsets.all(12),
-        width: 369,
+        width: double.infinity,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(10),
@@ -601,7 +649,7 @@ class PetProfileCard extends StatelessWidget {
         child: Row(
           children: [
             CircleAvatar(
-              radius: 30,
+              radius: (MediaQuery.sizeOf(context).width * 0.10).clamp(24.0, 40.0),
               backgroundColor: Colors.grey[300],
               foregroundImage: hasPhotoUrl ? NetworkImage(pet.imageUrl!) : null,
               child: !hasPhotoUrl
@@ -620,11 +668,11 @@ class PetProfileCard extends StatelessWidget {
                 children: [
                   Text(
                     '${pet.name} - ${pet.breed}',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: ts.scale(16).clamp(12.0, 20.0), fontWeight: FontWeight.bold),
                   ),
                   Text(
-                    'Weight: ${pet.weight}, Age: ${pet.age} months',
-                    style: TextStyle(color: Colors.grey[700]),
+                    'Weight (kg): ${pet.weight}, Age: ${pet.age} months',
+                    style: TextStyle(fontSize: ts.scale(13), color: Colors.grey[700]),
                   ),
                   Row(
                     children: [
@@ -656,3 +704,57 @@ class PetProfileCard extends StatelessWidget {
     );
   }
 }
+
+Future<void> showPetSummaryDialog(
+  BuildContext ctx,
+  Pet pet, {
+  List<String>? otherOwners = const [],
+}) async {
+  final ts = MediaQuery.textScalerOf(ctx);
+
+  // pull the three core macros
+  final nr = pet.nutritionalRequirements;
+  final kcal  = pet.calorieRequirement.round();
+  final pro   = nr['Crude Protein']!.round();
+  final fat   = nr['Crude Fat']!.round();
+  final carbs = nr['Carbohydrates']!.round();
+
+  await showDialog(
+    context: ctx,
+    builder: (dialogCtx) => AlertDialog(
+      title: Text('🐾  ${pet.name} added!'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Daily targets', style: TextStyle(fontWeight: FontWeight.bold)),
+          SizedBox(height: 8),
+          _macroRow('Calories', '$kcal kcal', ts),
+          _macroRow('Protein',  '$pro g',  ts),
+          _macroRow('Fat',      '$fat g',  ts),
+          _macroRow('Carbs',    '$carbs g',ts),
+          if (otherOwners != null && otherOwners.isNotEmpty) ...[
+            SizedBox(height: 16),
+            Text('Also shared with', style: TextStyle(fontWeight: FontWeight.bold)),
+            SizedBox(height: 6),
+            ...otherOwners.map((o) => Text('• $o')),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogCtx),
+          child: const Text('Got it'),
+        )
+      ],
+    ),
+  );
+}
+
+Widget _macroRow(String label, String value, TextScaler ts) => Row(
+  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  children: [
+    Text(label, style: TextStyle(fontSize: ts.scale(14))),
+    Text(value, style: TextStyle(fontSize: ts.scale(14), fontWeight: FontWeight.w600)),
+  ],
+);

@@ -38,9 +38,12 @@ class _LoginPageState extends State<LoginPage> {
       _showOfflineMsg(context);
       return;
     }
-    try {
-      var appState = context.read<MyAppState>();
-      final userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+    final appState = context.read<MyAppState>();
+
+    await appState.run(
+      context, 
+      () async {
+        final userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: emailController.text.trim(), 
         password: passwordController.text.trim()
       );
@@ -61,15 +64,17 @@ class _LoginPageState extends State<LoginPage> {
         await appState.setMemberSince(user.metadata.creationTime!);
       }
       await appState.getPets(false);
-    }
-    on FirebaseAuthException catch (e){
-      print(e.message);
-    }
+      },
+      successMsg: 'Signed in successfully!'
+    );
+  
   }
 
   @override
   Widget build(BuildContext context) {
     var appState = context.watch<MyAppState>();
+    final ts = MediaQuery.textScalerOf(context);      // text scaler
+    final w  = MediaQuery.sizeOf(context).width;      // screen width
     return Scaffold(
       appBar: AppBar(),
       body: Padding(
@@ -79,10 +84,10 @@ class _LoginPageState extends State<LoginPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text(
-                'Sign In.',
+              Text(
+                'Sign In',
                 style: TextStyle(
-                  fontSize: 50,
+                  fontSize: ts.scale(42).clamp(26.0, 56.0),
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -92,6 +97,7 @@ class _LoginPageState extends State<LoginPage> {
                 decoration: const InputDecoration(
                   hintText: 'Email',
                 ),
+                style: TextStyle(fontSize: ts.scale(15).clamp(12.0, 22.0)),
               ),
               const SizedBox(height: 15),
               TextFormField(
@@ -100,22 +106,32 @@ class _LoginPageState extends State<LoginPage> {
                   hintText: 'Password',
                 ),
                 obscureText: true,
+                style: TextStyle(fontSize: ts.scale(15).clamp(12.0, 22.0)),
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () async {
-                  if (!context.read<ConnectivityService>().isOnline) {
-                    _showOfflineMsg(context);
-                    return;
-                  }
-                  await loginUserWithEmailAndPassword();
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                child: const Text(
-                  'SIGN IN',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white,
+              SizedBox(
+                width: w * 0.8,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    if (!context.read<ConnectivityService>().isOnline) {
+                      _showOfflineMsg(context);
+                      return;
+                    }
+                    await loginUserWithEmailAndPassword();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    padding: EdgeInsets.symmetric(
+                      vertical: ts.scale(14).clamp(10.0, 20.0),
+                    ),
+                  ),
+                  child: Text(
+                    'SIGN IN',
+                    style: TextStyle(
+                      fontSize: ts.scale(16).clamp(12.0, 24.0),
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
@@ -127,19 +143,50 @@ class _LoginPageState extends State<LoginPage> {
                 child: RichText(
                   text: TextSpan(
                     text: 'Don\'t have an account? ',
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: TextStyle(fontSize: ts.scale(14).clamp(11.0, 20.0), color: Colors.blueGrey),
                     children: [
                       TextSpan(
                         text: 'Sign Up',
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                        style: TextStyle(fontSize: ts.scale(14).clamp(11.0, 20.0), color: Colors.black),
                       ),
                     ],
                   ),
                 ),
               ),
+              TextButton(
+                onPressed: () async {
+                  if (!context.read<ConnectivityService>().isOnline) {
+                    _showOfflineMsg(context);
+                    return;
+                  }
+
+                  final email = emailController.text.trim();
+                  if (email.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Enter your email first.')),
+                    );
+                    return;
+                  }
+
+                  try {
+                    await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content:
+                            Text('If an account exists, a reset link has been sent to your inbox.'),
+                      ),
+                    );
+                  } on FirebaseAuthException catch (e) {
+                    // Most errors here are quota/invalid-email; user-not-found may be masked.
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(e.message ?? 'Could not send email')),
+                    );
+                  }
+                },
+                child: const Text('Forgot password?'),
+              ),
+
             ],
           ),
         ),

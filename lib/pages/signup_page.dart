@@ -40,25 +40,26 @@ class _SignUpPageState extends State<SignUpPage> {
       _showOfflineMsg(context);
       return;
     }
-    try {
-      final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: emailController.text.trim(), 
-        password: passwordController.text.trim()
-      );
-      print(userCredential.user);
-
-      if (!mounted) return;
-      var appState = context.read<MyAppState>();
-      appState.setNeedsToEnterName(true);  
-    }
-    on FirebaseAuthException catch (e){
-      print(e.message);
-    }
+    final appState = context.read<MyAppState>();
+    await appState.run(
+      context, 
+      () async {
+        await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: emailController.text.trim(), 
+          password: passwordController.text.trim()
+        );
+        appState.setNeedsToEnterName(true);  
+      },
+      successMsg: 'Account created -- please enter username'
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     var appState = context.watch<MyAppState>();
+    final ts      = MediaQuery.textScalerOf(context);   // new
+    final double w = MediaQuery.sizeOf(context).width;  // we’ll re-use
+
     return Scaffold(
       body: Padding(
         padding: const EdgeInsets.all(15.0),
@@ -67,20 +68,20 @@ class _SignUpPageState extends State<SignUpPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text(
-                'Sign Up.',
+              Text(
+                'Sign Up',
                 style: TextStyle(
-                  fontSize: 50,
+                  fontSize: ts.scale(42).clamp(26.0, 56.0),
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 10),
-              const SizedBox(height: 20),
+              const SizedBox(height: 30),
               TextFormField(
                 controller: emailController,
                 decoration: const InputDecoration(
                   hintText: 'Email',
                 ),
+                style: TextStyle(fontSize: ts.scale(15).clamp(12.0, 22.0)),
               ),
               const SizedBox(height: 15),
               TextFormField(
@@ -88,23 +89,33 @@ class _SignUpPageState extends State<SignUpPage> {
                 decoration: const InputDecoration(
                   hintText: 'Password',
                 ),
+                style: TextStyle(fontSize: ts.scale(15).clamp(12.0, 22.0)),
                 obscureText: true,
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () async {
-                  if (!context.read<ConnectivityService>().isOnline) {
-                    _showOfflineMsg(context);
-                    return;
-                  }
-                  await createUserWithEmailAndPassword();
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                child: const Text(
-                  'SIGN UP',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white,
+              SizedBox(
+                width: w * 0.8,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    if (!context.read<ConnectivityService>().isOnline) {
+                      _showOfflineMsg(context);
+                      return;
+                    }
+                    await createUserWithEmailAndPassword();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red, 
+                    padding: EdgeInsets.symmetric(
+                      vertical: ts.scale(14).clamp(10.0, 20.0),
+                    ),
+                  ),
+                  child: Text(
+                    'SIGN UP',
+                    style: TextStyle(
+                      fontSize: ts.scale(16).clamp(12.0, 24.0),
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
@@ -116,14 +127,11 @@ class _SignUpPageState extends State<SignUpPage> {
                 child: RichText(
                   text: TextSpan(
                     text: 'Already have an account? ',
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: TextStyle(fontSize: ts.scale(14).clamp(11.0, 20.0), color: Colors.blueGrey),
                     children: [
                       TextSpan(
                         text: 'Sign In',
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                        style: TextStyle(fontSize: ts.scale(14).clamp(11.0, 20.0), color: Colors.black)
                       ),
                     ],
                   ),
